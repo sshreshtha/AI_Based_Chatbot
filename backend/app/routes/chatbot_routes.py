@@ -8,10 +8,12 @@ from app.config.settings import Settings, get_settings
 from app.database.mongo_client import get_database
 from app.models.request_models import ChatQueryRequest, TicketCreateRequest
 from app.models.response_models import (
+    AdminOverviewResponse,
     AnalyticsItem,
     ChatQueryResponse,
     HealthResponse,
     HistoryItem,
+    TicketItem,
     TicketResponse,
 )
 from app.services.alias_learning_service import AliasLearningService
@@ -26,6 +28,14 @@ from app.services.ticket_service import TicketService
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix=get_settings().api_prefix, tags=["Module 4 Chatbot"])
+COLLECTION_NAMES = [
+    "knowledge_chunks",
+    "admin_resolutions",
+    "response_cache",
+    "query_analytics",
+    "topic_aliases",
+    "tickets",
+]
 
 
 def get_services(settings: Settings = Depends(get_settings)) -> dict:
@@ -134,12 +144,7 @@ def get_analytics(
 
 @router.get("/health", response_model=HealthResponse, summary="Check chatbot module health")
 def health(services: Annotated[dict, Depends(get_services)]) -> HealthResponse:
-    db_status = "ok"
-    try:
-        services["db"].command("ping")
-    except Exception:
-        logger.exception("MongoDB health check failed")
-        db_status = "unavailable"
+    db_status = _database_status(services)
     return HealthResponse(
         status="ok" if db_status == "ok" else "degraded",
         database=db_status,
@@ -150,3 +155,46 @@ def health(services: Annotated[dict, Depends(get_services)]) -> HealthResponse:
             "vector_index": services["settings"].vector_index_name,
         },
     )
+
+
+@router.get("/admin/overview", response_model=AdminOverviewResponse, summary="Get live MongoDB-backed admin overview")
+def admin_overview(services: Annotated[dict, Depends(get_services)]) -> AdminOverviewResponse:
+    health_response = health(services)
+    db = services["db"]
+    collections = {name: db[name].estimated_document_count() for name in COLLECTION_NAMES}
+    recent_queries = [
+        AnalyticsItem(
+            query=item["query"],
+            mapped_topic=item.get("mapped_topic"),
+            similarity_score=float(item.get("similarity_score", 0.0)),
+            frequency=int(item.get("frequency", 1)),
+            timestamp=item["timestamp"],
+        )
+        for item in services["analytics"].top_queries(5)
+    ]
+    recent_tickets = [
+        TicketItem(
+            ticket_id=services["tickets"].stringify_id(item),
+            question=item["question"],
+            email=item.get("email"),
+            status=item.get("status", "open"),
+            created_at=item["created_at"],
+            session_id=item.get("session_id"),
+        )
+        for item in services["tickets"].list_tickets(5)
+    ]
+    return AdminOverviewResponse(
+        health=health_response,
+        collections=collections,
+        recent_queries=recent_queries,
+        recent_tickets=recent_tickets,
+    )
+
+
+def _database_status(services: dict) -> str:
+    try:
+        services["db"].command("ping")
+        return "ok"
+    except Exception:
+        logger.exception("MongoDB health check failed")
+        return "unavailable"

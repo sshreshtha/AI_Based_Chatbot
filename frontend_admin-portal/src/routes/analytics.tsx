@@ -18,7 +18,7 @@ import { KpiCard, PageHeader, SectionCard } from "@/components/admin-ui";
 import { cn } from "@/lib/utils";
 
 export const Route = createFileRoute("/analytics")({
-  head: () => ({ meta: [{ title: "Analytics — Nexus Knowledge" }] }),
+  head: () => ({ meta: [{ title: "Analytics - NTPC Control Center" }] }),
   component: AnalyticsPage,
 });
 
@@ -91,7 +91,7 @@ const chartTheme = {
 function AnalyticsPage() {
   const [range, setRange] = useState("30 days");
   return (
-    <div className="mx-auto w-full max-w-[1600px] p-4 sm:p-6">
+    <div className="stagger-soft mx-auto w-full max-w-[1600px] p-4 sm:p-6">
       <PageHeader title="Analytics Dashboard" subtitle="Monitor AI performance and knowledge effectiveness.">
         <div className="flex flex-wrap gap-1 p-1 bg-muted rounded-md">
           {ranges.map((r) => (

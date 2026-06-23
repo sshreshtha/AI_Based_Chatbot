@@ -1,6 +1,7 @@
 "use client"
 
 import { useState } from "react"
+import Image from "next/image"
 import Link from "next/link"
 import { usePathname } from "next/navigation"
 import { motion, AnimatePresence } from "motion/react"
@@ -8,10 +9,9 @@ import {
   LayoutDashboard,
   Library,
   Menu,
+  HelpCircle,
   PanelLeftClose,
   PanelLeft,
-  HelpCircle,
-  Bot,
 } from "lucide-react"
 
 import { cn } from "@/lib/utils"
@@ -37,16 +37,23 @@ const navItems = [
 function Brand({ collapsed }: { collapsed?: boolean }) {
   return (
     <div className="flex items-center gap-2.5">
-      <div className="flex size-9 shrink-0 items-center justify-center rounded-md bg-primary text-primary-foreground">
-        <Bot className="size-5" aria-hidden="true" />
+      <div className="animate-logo-breathe flex size-10 shrink-0 items-center justify-center rounded-md border border-primary/15 bg-card shadow-sm">
+        <Image
+          src="/NTPC-Preview.png"
+          alt="NTPC"
+          width={32}
+          height={32}
+          className="h-7 w-auto object-contain"
+          priority
+        />
       </div>
       {!collapsed && (
         <div className="flex flex-col leading-tight">
           <span className="text-sm font-semibold text-foreground">
-            Knowledge Portal
+            NTPC Chatbot
           </span>
           <span className="text-xs text-muted-foreground">
-            Enterprise KMS
+            Joinee & trainee helpdesk
           </span>
         </div>
       )}
@@ -79,11 +86,11 @@ function NavLinks({
             onClick={onNavigate}
             aria-current={active ? "page" : undefined}
             className={cn(
-              "group flex items-center gap-3 rounded-md px-3 py-2.5 text-sm font-medium transition-colors",
+              "group flex items-center gap-3 rounded-md px-3 py-2.5 text-sm font-medium transition-all duration-200 ease-out",
               collapsed && "justify-center px-0",
               active
-                ? "bg-accent text-accent-foreground"
-                : "text-muted-foreground hover:bg-secondary hover:text-foreground"
+                ? "bg-accent text-accent-foreground shadow-sm ring-1 ring-primary/15"
+                : "text-muted-foreground hover:bg-secondary hover:text-foreground hover:translate-x-0.5"
             )}
           >
             <Icon className="size-5 shrink-0" aria-hidden="true" />
@@ -114,23 +121,28 @@ export function PortalShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname()
 
   return (
-    <div className="flex min-h-svh w-full bg-background">
+    <div
+      className="ntpc-shell-bg flex min-h-svh w-full bg-background"
+      style={{ ["--sidebar-offset" as string]: `${collapsed ? 76 : 264}px` }}
+    >
+      <div aria-hidden="true" className="thermal-backdrop">
+        <div className="thermal-stack thermal-stack-secondary" />
+        <div className="thermal-stack" />
+        <div className="turbine-orbit" />
+        <div className="heat-lines" />
+      </div>
       {/* Desktop sidebar */}
       <motion.aside
-        animate={{ width: collapsed ? 76 : 264 }}
-        transition={{ duration: 0.25, ease: "easeInOut" }}
-        className="sticky top-0 hidden h-svh shrink-0 flex-col border-r border-border bg-sidebar lg:flex"
+        initial={{ opacity: 0, x: -8 }}
+        animate={{ opacity: 1, x: 0, width: collapsed ? 76 : 264 }}
+        transition={{ duration: 0.22, ease: "easeOut" }}
+        className="fixed inset-y-0 left-0 z-40 hidden flex-col border-r border-sidebar-border bg-sidebar/92 shadow-[8px_0_32px_rgb(0_135_201/6%)] backdrop-blur lg:flex"
       >
-        <div
-          className={cn(
-            "flex h-16 items-center border-b border-border px-4",
-            collapsed && "justify-center px-2"
-          )}
-        >
+        <div className={cn("flex h-16 items-center border-b border-border px-4", collapsed && "justify-center px-2")}>
           <Brand collapsed={collapsed} />
         </div>
 
-        <div className="flex-1 overflow-y-auto p-3">
+        <div className="flex-1 p-3">
           <NavLinks collapsed={collapsed} />
         </div>
 
@@ -138,7 +150,7 @@ export function PortalShell({ children }: { children: React.ReactNode }) {
           <Button
             variant="ghost"
             size="sm"
-            onClick={() => setCollapsed((c) => !c)}
+            onClick={() => setCollapsed((value) => !value)}
             className={cn(
               "w-full text-muted-foreground",
               collapsed ? "justify-center px-0" : "justify-start"
@@ -158,9 +170,12 @@ export function PortalShell({ children }: { children: React.ReactNode }) {
       </motion.aside>
 
       {/* Main column */}
-      <div className="flex min-w-0 flex-1 flex-col">
+      <div
+        className="flex min-w-0 flex-1 flex-col"
+        style={{ paddingLeft: "var(--sidebar-offset)" }}
+      >
         {/* Top navigation bar */}
-        <header className="sticky top-0 z-30 flex h-16 items-center gap-3 border-b border-border bg-card/95 px-4 backdrop-blur supports-[backdrop-filter]:bg-card/80 md:px-6">
+        <header className="sticky top-0 z-30 flex h-16 items-center gap-3 border-b border-border bg-card/90 px-4 shadow-[0_8px_28px_rgb(0_135_201/6%)] backdrop-blur supports-[backdrop-filter]:bg-card/78 md:px-6">
           {/* Mobile menu */}
           <Sheet open={mobileOpen} onOpenChange={setMobileOpen}>
             <SheetTrigger
@@ -188,11 +203,18 @@ export function PortalShell({ children }: { children: React.ReactNode }) {
           </Sheet>
 
           <div className="flex min-w-0 items-center gap-2.5">
-            <div className="flex size-8 shrink-0 items-center justify-center rounded-md bg-primary text-primary-foreground lg:hidden">
-              <Bot className="size-5" aria-hidden="true" />
+            <div className="animate-logo-breathe flex size-9 shrink-0 items-center justify-center rounded-md border border-primary/15 bg-card shadow-sm lg:hidden">
+              <Image
+                src="/NTPC-Preview.png"
+                alt="NTPC"
+                width={28}
+                height={28}
+                className="h-6 w-auto object-contain"
+                priority
+              />
             </div>
             <h1 className="truncate text-base font-semibold text-foreground md:text-lg">
-              AI Common Service Chatbot
+              NTPC AI Common Service Chatbot
             </h1>
           </div>
 
@@ -225,9 +247,9 @@ export function PortalShell({ children }: { children: React.ReactNode }) {
           <AnimatePresence mode="wait">
             <motion.div
               key={pathname}
-              initial={{ opacity: 0, y: 8 }}
+              initial={{ opacity: 0, y: 6 }}
               animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.25, ease: "easeOut" }}
+              transition={{ duration: 0.22, ease: "easeOut" }}
               className="mx-auto w-full max-w-[1400px] px-4 py-6 md:px-6 md:py-8"
             >
               {children}

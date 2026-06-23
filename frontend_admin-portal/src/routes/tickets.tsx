@@ -1,5 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useState, useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import {
   Ticket as TicketIcon,
@@ -15,6 +15,7 @@ import {
   Sparkles,
 } from "lucide-react";
 import { KpiCard, PageHeader, SectionCard, StatusBadge } from "@/components/admin-ui";
+import { fetchTickets, type TicketRecord } from "@/lib/backend-api";
 import {
   Select,
   SelectContent,
@@ -24,7 +25,7 @@ import {
 } from "@/components/ui/select";
 
 export const Route = createFileRoute("/tickets")({
-  head: () => ({ meta: [{ title: "Ticket Management — Nexus Knowledge" }] }),
+  head: () => ({ meta: [{ title: "Ticket Management - NTPC Control Center" }] }),
   component: TicketsPage,
 });
 
@@ -39,19 +40,42 @@ type Ticket = {
   related: string[];
 };
 
-const tickets: Ticket[] = [
+const fallbackTickets: Ticket[] = [
   { id: "TKT-2049", question: "What is the latest FGD operating parameter range for Unit 4?", priority: "High", status: "Open", created: "2026-06-22", aiSummary: "Retrieved 3 chunks from Operations Manual v4.2, low confidence on Unit 4 specifics.", aiResponse: "Based on the Operations Manual, the FGD parameters typically range from ... However, Unit 4 specific updates from 2025 are not present in the index.", related: ["Operations Manual v4.2", "FGD SOP 2023"] },
   { id: "TKT-2048", question: "How do I file a leave encashment request under the new policy?", priority: "Medium", status: "In Progress", created: "2026-06-22", aiSummary: "Matched HR Policy 2024 sections 4.2-4.5.", aiResponse: "Submit Form HR-LE-12 via the employee self-service portal under Leave > Encashment.", related: ["HR Policy 2024", "Self-Service Portal Guide"] },
-  { id: "TKT-2047", question: "Turbine vibration alarm thresholds for maintenance?", priority: "High", status: "Escalated", created: "2026-06-21", aiSummary: "Insufficient data — needs SME review.", aiResponse: "", related: ["Maintenance Procedures v3"] },
+  { id: "TKT-2047", question: "Turbine vibration alarm thresholds for maintenance?", priority: "High", status: "Escalated", created: "2026-06-21", aiSummary: "Insufficient data - needs SME review.", aiResponse: "", related: ["Maintenance Procedures v3"] },
   { id: "TKT-2046", question: "Coal handling emergency shutdown SOP location?", priority: "Critical", status: "Open", created: "2026-06-21", aiSummary: "Found reference in Safety Bulletin 2024-08.", aiResponse: "Refer to Safety Bulletin 2024-08, section 3.1 for the emergency shutdown sequence.", related: ["Safety Bulletin 2024-08"] },
   { id: "TKT-2045", question: "How to register for ISO 55001 internal audit training?", priority: "Low", status: "Resolved", created: "2026-06-20", aiSummary: "Resolved via LMS link.", aiResponse: "Register through the LMS at learning.nexus/iso55001.", related: ["Compliance Training Catalog"] },
   { id: "TKT-2044", question: "Cybersecurity incident reporting timeline?", priority: "Medium", status: "Open", created: "2026-06-20", aiSummary: "Pulled from IT Security Policy 2025.", aiResponse: "Report within 1 hour to the SOC at soc@nexus.local.", related: ["IT Security Policy 2025"] },
 ];
 
 function TicketsPage() {
+  const [liveTickets, setLiveTickets] = useState<Ticket[] | null>(null);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [search, setSearch] = useState("");
   const [priority, setPriority] = useState("all");
   const [status, setStatus] = useState("all");
+  const tickets = liveTickets ?? fallbackTickets;
+
+  useEffect(() => {
+    let active = true;
+    fetchTickets(50)
+      .then((records) => {
+        if (active) {
+          setLiveTickets(records.map(mapTicketRecord));
+          setLoadError(null);
+        }
+      })
+      .catch(() => {
+        if (active) {
+          setLoadError("Live Mongo ticket queue unavailable");
+        }
+      });
+    return () => {
+      active = false;
+    };
+  }, []);
+
   const [selectedId, setSelectedId] = useState<string>(tickets[0].id);
   const [draft, setDraft] = useState(tickets[0].aiResponse);
 
@@ -65,6 +89,19 @@ function TicketsPage() {
   }, [search, priority, status]);
 
   const selected = tickets.find((t) => t.id === selectedId) ?? tickets[0];
+  const openTickets = tickets.filter((t) => t.status === "Open").length;
+  const escalatedTickets = tickets.filter((t) => t.status === "Escalated").length;
+
+  useEffect(() => {
+    if (tickets.length === 0) {
+      return;
+    }
+    const selectedTicket = tickets.find((t) => t.id === selectedId);
+    if (!selectedTicket) {
+      setSelectedId(tickets[0].id);
+      setDraft(tickets[0].aiResponse);
+    }
+  }, [tickets, selectedId]);
 
   const onSelect = (id: string) => {
     setSelectedId(id);
@@ -73,14 +110,17 @@ function TicketsPage() {
   };
 
   return (
-    <div className="mx-auto w-full max-w-[1600px] p-4 sm:p-6">
-      <PageHeader title="Ticket Management" subtitle="Triage and resolve unresolved AI queries." />
+    <div className="stagger-soft mx-auto w-full max-w-[1600px] p-4 sm:p-6">
+      <PageHeader
+        title="Ticket Management"
+        subtitle={loadError ?? "Triage and resolve unresolved AI queries."}
+      />
 
       <div className="grid grid-cols-2 xl:grid-cols-4 gap-3 sm:gap-4">
-        <KpiCard icon={TicketIcon} label="Open Tickets" value="184" trend={{ value: 4.2, positive: false }} delay={0} />
+        <KpiCard icon={TicketIcon} label="Open Tickets" value={openTickets.toString()} trend={{ value: 4.2, positive: false }} delay={0} />
         <KpiCard icon={CheckCircle2} label="Resolved Today" value="42" trend={{ value: 12 }} delay={0.05} />
         <KpiCard icon={Clock} label="Avg. Resolution" value="3h 12m" trend={{ value: 8 }} delay={0.1} />
-        <KpiCard icon={AlertTriangle} label="Escalated" value="14" trend={{ value: 1.5, positive: false }} delay={0.15} />
+        <KpiCard icon={AlertTriangle} label="Escalated" value={escalatedTickets.toString()} trend={{ value: 1.5, positive: false }} delay={0.15} />
       </div>
 
       <div className="grid grid-cols-1 xl:grid-cols-5 gap-4 mt-4 sm:mt-6">
@@ -153,14 +193,14 @@ function TicketsPage() {
         </SectionCard>
 
         <SectionCard
-          title={`Ticket Details — ${selected.id}`}
+          title={`Ticket Details - ${selected.id}`}
           description={selected.question}
           className="xl:col-span-2"
         >
           <div className="space-y-4">
             <DetailBlock icon={Sparkles} label="AI Retrieval Summary">{selected.aiSummary}</DetailBlock>
             <DetailBlock icon={BookOpenCheck} label="Suggested AI Response">
-              <p className="text-sm text-muted-foreground">{selected.aiResponse || "No response generated — confidence below threshold."}</p>
+              <p className="text-sm text-muted-foreground">{selected.aiResponse || "No response generated - confidence below threshold."}</p>
             </DetailBlock>
             <DetailBlock icon={FileText} label="Related Knowledge Documents">
               <ul className="text-sm space-y-1">
@@ -214,6 +254,36 @@ function TicketsPage() {
       </div>
     </div>
   );
+}
+
+function mapTicketRecord(record: TicketRecord): Ticket {
+  const status = normalizeStatus(record.status);
+  return {
+    id: record.ticket_id,
+    question: record.question,
+    priority: inferPriority(record.question),
+    status,
+    created: new Date(record.created_at).toISOString().slice(0, 10),
+    aiSummary: `Stored in MongoDB tickets collection${record.email ? ` for ${record.email}` : ""}.`,
+    aiResponse: status === "Resolved" ? "Marked resolved from the admin portal." : "Awaiting admin review.",
+    related: record.session_id ? [`Session ${record.session_id}`] : ["MongoDB tickets collection"],
+  };
+}
+
+function inferPriority(question: string): Ticket["priority"] {
+  const text = question.toLowerCase();
+  if (text.includes("urgent") || text.includes("critical") || text.includes("safety")) return "Critical";
+  if (text.includes("vibration") || text.includes("shutdown") || text.includes("alarm")) return "High";
+  if (text.includes("policy") || text.includes("leave") || text.includes("hr")) return "Medium";
+  return "Low";
+}
+
+function normalizeStatus(status: string): Ticket["status"] {
+  const text = status.toLowerCase();
+  if (text.includes("progress")) return "In Progress";
+  if (text.includes("escalat")) return "Escalated";
+  if (text.includes("resolv")) return "Resolved";
+  return "Open";
 }
 
 function DetailBlock({ icon: Icon, label, children }: { icon: any; label: string; children: React.ReactNode }) {

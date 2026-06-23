@@ -66,10 +66,10 @@ function QuestionBubble({ question }: { question: string }) {
 
 export function TypingIndicator() {
   return (
-    <Card className="border-border">
+    <Card className="ntpc-card border-border bg-card/92">
       <CardContent className="p-5">
         <div className="flex items-start gap-3">
-          <div className="flex size-8 shrink-0 items-center justify-center rounded-full bg-primary text-primary-foreground">
+          <div className="animate-logo-breathe flex size-8 shrink-0 items-center justify-center rounded-full bg-primary text-primary-foreground">
             <Bot className="size-4" aria-hidden="true" />
           </div>
           <div className="flex flex-col gap-3 pt-1">
@@ -117,10 +117,10 @@ function AnswerCard({
   }
 
   return (
-    <Card className="border-border">
+    <Card className="ntpc-card border-border bg-card/92">
       <CardContent className="flex flex-col gap-4 p-5">
         <div className="flex items-start gap-3">
-          <div className="flex size-8 shrink-0 items-center justify-center rounded-full bg-primary text-primary-foreground">
+          <div className="animate-logo-breathe flex size-8 shrink-0 items-center justify-center rounded-full bg-primary text-primary-foreground">
             <Bot className="size-4" aria-hidden="true" />
           </div>
           <p className="pt-1 text-sm leading-relaxed text-foreground">

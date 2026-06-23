@@ -31,11 +31,12 @@ backend/
 Create `backend/.env`:
 
 ```env
-MONGODB_URI=mongodb+srv://<user>:<password>@<cluster>/<database>
+MONGO_URI=mongodb+srv://<user>:<password>@<cluster>/<database>
 MONGODB_DATABASE=ai_chatbot
 VECTOR_INDEX_NAME=vector_index
 GEMINI_API_KEY=<your-gemini-api-key>
 GEMINI_MODEL=gemini-2.5-flash
+CORS_ORIGINS=http://localhost:3000,http://localhost:3001
 ```
 
 Optional settings:
@@ -110,6 +111,7 @@ Checks MongoDB connectivity and service configuration.
 ## Integration Notes
 
 - Frontend should call only the `/api/chat/*` endpoints.
+- `MONGO_URI` is accepted as the primary MongoDB connection alias, with `MONGODB_URI` also supported for compatibility.
 - Admin module can read/update `tickets` and use `query_analytics`.
 - Ingestion module must store embeddings using the same model: `sentence-transformers/all-MiniLM-L6-v2`.
 - Gemini prompts are grounded to retrieved context only; unavailable answers are explicitly refused.

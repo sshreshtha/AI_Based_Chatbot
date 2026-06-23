@@ -24,6 +24,9 @@ class TicketService:
         payload["_id"] = result.inserted_id
         return payload
 
+    def list_tickets(self, limit: int) -> list[dict]:
+        return list(self.collection.find({}).sort("created_at", -1).limit(limit))
+
     @staticmethod
     def stringify_id(ticket: dict) -> str:
         ticket_id = ticket.get("_id")

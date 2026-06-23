@@ -1,7 +1,8 @@
 from functools import lru_cache
+from pathlib import Path
 from typing import List
 
-from pydantic import Field
+from pydantic import AliasChoices, Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -10,10 +11,24 @@ class Settings(BaseSettings):
 
     app_name: str = "AI Knowledge Assistant - Module 4"
     api_prefix: str = "/api/chat"
-    cors_origins: List[str] = Field(default_factory=lambda: ["*"])
+    cors_origins: List[str] = Field(
+        default_factory=lambda: [
+            "http://localhost:3000",
+            "http://localhost:3001",
+            "http://127.0.0.1:3000",
+            "http://127.0.0.1:3001",
+        ],
+        validation_alias=AliasChoices("CORS_ORIGINS"),
+    )
 
-    mongodb_uri: str = Field(default="mongodb://localhost:27017", validation_alias="MONGODB_URI")
-    mongodb_database: str = Field(default="ai_chatbot", validation_alias="MONGODB_DATABASE")
+    mongodb_uri: str = Field(
+        default="mongodb://localhost:27017",
+        validation_alias=AliasChoices("MONGO_URI", "MONGODB_URI"),
+    )
+    mongodb_database: str = Field(
+        default="ai_chatbot",
+        validation_alias=AliasChoices("MONGO_DB", "MONGODB_DATABASE"),
+    )
 
     embedding_model_name: str = Field(default="sentence-transformers/all-MiniLM-L6-v2")
     vector_index_name: str = Field(default="vector_index", validation_alias="VECTOR_INDEX_NAME")
@@ -30,11 +45,25 @@ class Settings(BaseSettings):
     alias_learning_min_frequency: int = Field(default=3, ge=1)
 
     model_config = SettingsConfigDict(
-        env_file=".env",
+        env_file=(
+            Path(".env"),
+            Path("../.env"),
+            Path("backend/.env"),
+        ),
         env_file_encoding="utf-8",
         extra="ignore",
         populate_by_name=True,
     )
+
+    @field_validator("cors_origins", mode="before")
+    @classmethod
+    def normalize_cors_origins(cls, value):
+        if value is None:
+            return value
+        if isinstance(value, str):
+            items = [item.strip() for item in value.split(",")]
+            return [item for item in items if item]
+        return value
 
 
 @lru_cache

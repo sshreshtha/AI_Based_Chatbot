@@ -1,4 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
+import { useEffect, useState } from "react";
 import {
   MessageSquare,
   Ticket,
@@ -25,10 +26,11 @@ import {
   ResponsiveContainer,
 } from "recharts";
 import { KpiCard, PageHeader, SectionCard, StatusBadge } from "@/components/admin-ui";
+import { fetchAdminOverview, type AdminOverviewResponse } from "@/lib/backend-api";
 
 export const Route = createFileRoute("/")({
   head: () => ({
-    meta: [{ title: "Admin Dashboard — Nexus Knowledge" }],
+    meta: [{ title: "Admin Dashboard - NTPC Control Center" }],
   }),
   component: DashboardPage,
 });
@@ -84,8 +86,37 @@ const chartTheme = {
 };
 
 function DashboardPage() {
+  const [overview, setOverview] = useState<AdminOverviewResponse | null>(null);
+  const [overviewError, setOverviewError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let active = true;
+    fetchAdminOverview()
+      .then((data) => {
+        if (active) {
+          setOverview(data);
+          setOverviewError(null);
+        }
+      })
+      .catch(() => {
+        if (active) {
+          setOverviewError("Live Mongo snapshot unavailable");
+        }
+      });
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  const collectionCount = overview?.collections ?? {};
+  const totalKnowledgeDocs = (collectionCount.knowledge_chunks ?? 0) + (collectionCount.admin_resolutions ?? 0);
+  const activeResponses = collectionCount.response_cache ?? 0;
+  const topicAliases = collectionCount.topic_aliases ?? 0;
+  const queryRecords = collectionCount.query_analytics ?? 0;
+  const ticketRecords = collectionCount.tickets ?? 0;
+
   return (
-    <div className="mx-auto w-full max-w-[1600px] p-4 sm:p-6">
+    <div className="stagger-soft mx-auto w-full max-w-[1600px] p-4 sm:p-6">
       <PageHeader
         title="Admin Dashboard"
         subtitle="Operational overview of queries, tickets, and knowledge health."
@@ -97,6 +128,31 @@ function DashboardPage() {
         <KpiCard icon={CheckCircle2} label="Resolved Tickets" value="1,920" trend={{ value: 12.3 }} description="This month" delay={0.1} />
         <KpiCard icon={BookOpen} label="Knowledge Articles" value="780" trend={{ value: 5.6 }} description="Active in index" delay={0.15} />
       </div>
+
+      <SectionCard
+        title="Live Mongo Snapshot"
+        description={overviewError ?? "Collection counts and recent records read from MongoDB Atlas."}
+        className="mt-4 sm:mt-6"
+      >
+        <div className="grid grid-cols-2 lg:grid-cols-6 gap-3">
+          <LiveStat label="Knowledge docs" value={totalKnowledgeDocs} />
+          <LiveStat label="Query analytics" value={queryRecords} />
+          <LiveStat label="Response cache" value={activeResponses} />
+          <LiveStat label="Topic aliases" value={topicAliases} />
+          <LiveStat label="Tickets" value={ticketRecords} />
+          <LiveStat label="DB status" value={overview?.health.database ?? "—"} />
+        </div>
+        <div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-3 text-sm">
+          <div className="rounded-md border border-border bg-muted/30 p-3">
+            <p className="text-xs uppercase tracking-wider text-muted-foreground">Recent query</p>
+            <p className="mt-1 text-foreground">{overview?.recent_queries[0]?.query ?? "No live query data yet."}</p>
+          </div>
+          <div className="rounded-md border border-border bg-muted/30 p-3">
+            <p className="text-xs uppercase tracking-wider text-muted-foreground">Recent ticket</p>
+            <p className="mt-1 text-foreground">{overview?.recent_tickets[0]?.question ?? "No live ticket data yet."}</p>
+          </div>
+        </div>
+      </SectionCard>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 mt-4 sm:mt-6">
         <SectionCard title="Daily Query Trends" description="User questions submitted to AI" className="lg:col-span-2">
@@ -115,9 +171,9 @@ function DashboardPage() {
 
         <SectionCard title="System Health">
           <ul className="space-y-3 text-sm">
-            <HealthRow icon={Database} label="Database" status="Healthy" />
-            <HealthRow icon={Cpu} label="Knowledge Processing" status="Healthy" />
-            <HealthRow icon={ListChecks} label="Ticket Queue" status="Backlog: 184" warn />
+            <HealthRow icon={Database} label="Database" status={overview?.health.database === "ok" ? "Healthy" : "Unavailable"} warn={overview?.health.database !== "ok"} />
+            <HealthRow icon={Cpu} label="Knowledge Processing" status={overview?.health.services.nlp ?? "Healthy"} />
+            <HealthRow icon={ListChecks} label="Ticket Queue" status={`Backlog: ${ticketRecords}`} warn={ticketRecords > 0} />
           </ul>
         </SectionCard>
       </div>
@@ -201,6 +257,15 @@ function DashboardPage() {
           </ul>
         </SectionCard>
       </div>
+    </div>
+  );
+}
+
+function LiveStat({ label, value }: { label: string; value: string | number }) {
+  return (
+    <div className="rounded-md border border-border bg-background/60 p-3">
+      <p className="text-xs uppercase tracking-wider text-muted-foreground">{label}</p>
+      <p className="mt-1 text-lg font-semibold text-foreground">{value}</p>
     </div>
   );
 }

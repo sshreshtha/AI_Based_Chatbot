@@ -25,7 +25,7 @@ import {
 } from "@/components/ui/select";
 
 export const Route = createFileRoute("/knowledge")({
-  head: () => ({ meta: [{ title: "Knowledge Base Management — Nexus Knowledge" }] }),
+  head: () => ({ meta: [{ title: "Knowledge Base Management - NTPC Control Center" }] }),
   component: KnowledgePage,
 });
 
@@ -42,9 +42,9 @@ const documents = [
   { name: "FGD Operations Manual v4.2.pdf", category: "Technical Manuals", date: "2026-06-20", chunks: 248, status: "Active", last: "2026-06-20" },
   { name: "HR Leave Policy 2024.docx", category: "HR Policies", date: "2026-06-18", chunks: 36, status: "Active", last: "2026-06-18" },
   { name: "Safety Bulletin 2024-08.pdf", category: "Safety Documentation", date: "2026-06-15", chunks: 12, status: "Active", last: "2026-06-15" },
-  { name: "ISO 55001 Compliance Guide.pdf", category: "Compliance", date: "2026-06-12", chunks: 142, status: "Pending", last: "—" },
+  { name: "ISO 55001 Compliance Guide.pdf", category: "Compliance", date: "2026-06-12", chunks: 142, status: "Pending", last: "-" },
   { name: "Turbine Maintenance Procedures v3.docx", category: "Maintenance Procedures", date: "2026-06-10", chunks: 88, status: "Active", last: "2026-06-10" },
-  { name: "Coal Handling Operational Guidelines.pdf", category: "Operational Guidelines", date: "2026-06-08", chunks: 64, status: "Draft", last: "—" },
+  { name: "Coal Handling Operational Guidelines.pdf", category: "Operational Guidelines", date: "2026-06-08", chunks: 64, status: "Draft", last: "-" },
 ];
 
 const activity = [
@@ -61,7 +61,7 @@ function KnowledgePage() {
   const filtered = category === "all" ? documents : documents.filter((d) => d.category === category);
 
   return (
-    <div className="mx-auto w-full max-w-[1600px] p-4 sm:p-6">
+    <div className="stagger-soft mx-auto w-full max-w-[1600px] p-4 sm:p-6">
       <PageHeader title="Knowledge Base Management" subtitle="Manage organizational knowledge used by the AI system.">
         <button onClick={() => toast.success("Upload dialog opened")} className="inline-flex items-center gap-1.5 h-9 px-3 text-sm bg-primary text-primary-foreground rounded-md hover:bg-primary/90">
           <Upload className="h-3.5 w-3.5" /> Upload

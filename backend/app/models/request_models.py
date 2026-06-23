@@ -1,6 +1,6 @@
 from typing import Optional
 
-from pydantic import BaseModel, EmailStr, Field
+from pydantic import BaseModel, EmailStr, Field, field_validator
 
 
 class ChatQueryRequest(BaseModel):
@@ -10,9 +10,19 @@ class ChatQueryRequest(BaseModel):
 
 
 class TicketCreateRequest(BaseModel):
-    question: str = Field(..., min_length=1, max_length=1000)
+    question: str = Field(..., max_length=1000)
     email: EmailStr
     session_id: Optional[str] = Field(default=None, max_length=128)
+
+    @field_validator("question", mode="before")
+    @classmethod
+    def validate_question(cls, value):
+        if not isinstance(value, str):
+            raise ValueError("question must be a string")
+        question = value.strip()
+        if not question:
+            raise ValueError("question must not be empty")
+        return question
 
 
 class HistoryQuery(BaseModel):

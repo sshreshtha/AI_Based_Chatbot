@@ -10,32 +10,33 @@ import { Card, CardContent } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { QuickAccess } from "@/components/dashboard/quick-access"
 import { AiResponse, TypingIndicator } from "@/components/dashboard/ai-response"
-import { generateAnswer, type AnswerResult } from "@/lib/mock-answer"
 import { recentQuestions, suggestedTopics } from "@/lib/portal-data"
+import { queryChatbot } from "@/lib/chat-api"
+import type { AnswerResult } from "@/lib/mock-answer"
 
 export default function DashboardPage() {
   const [query, setQuery] = useState("")
   const [loading, setLoading] = useState(false)
   const [result, setResult] = useState<AnswerResult | null>(null)
+  const [sessionId] = useState(() => crypto.randomUUID())
   const inputRef = useRef<HTMLInputElement>(null)
   const responseRef = useRef<HTMLDivElement>(null)
 
-  const ask = (q: string) => {
+  const ask = async (q: string) => {
     const trimmed = q.trim()
     if (!trimmed) return
     setQuery(trimmed)
     setResult(null)
     setLoading(true)
-    setTimeout(() => {
-      setResult(generateAnswer(trimmed))
-      setLoading(false)
-      requestAnimationFrame(() =>
-        responseRef.current?.scrollIntoView({
-          behavior: "smooth",
-          block: "start",
-        })
-      )
-    }, 1600)
+    const response = await queryChatbot({ query: trimmed, sessionId })
+    setResult(response)
+    setLoading(false)
+    requestAnimationFrame(() =>
+      responseRef.current?.scrollIntoView({
+        behavior: "smooth",
+        block: "start",
+      })
+    )
   }
 
   const focusSearch = () => {
@@ -44,25 +45,78 @@ export default function DashboardPage() {
   }
 
   return (
-    <div className="flex flex-col gap-10">
+    <div className="stagger-soft flex flex-col gap-10">
+      <motion.section
+        initial={{ opacity: 0, y: 10 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.35, ease: "easeOut" }}
+        className="ntpc-card overflow-hidden rounded-xl border border-primary/10 bg-card/92"
+      >
+        <div className="flex items-start justify-between gap-4 border-b border-border px-5 py-4">
+          <div className="flex min-w-0 items-start gap-3">
+            <div className="animate-logo-breathe mt-0.5 flex size-10 shrink-0 items-center justify-center rounded-md bg-accent text-primary">
+              <Sparkles className="size-5" aria-hidden="true" />
+            </div>
+            <div className="min-w-0">
+              <p className="text-sm font-semibold text-foreground">
+                Welcome to NTPC support
+              </p>
+              <p className="text-sm leading-relaxed text-muted-foreground">
+                Ask anything about joining, induction, training, safety, or HR
+                procedures. The assistant is set up for new joinees and trainees.
+              </p>
+            </div>
+          </div>
+          <Badge variant="secondary" className="hidden border-primary/10 bg-secondary text-secondary-foreground sm:inline-flex">
+            Calm NTPC workspace
+          </Badge>
+        </div>
+        <div className="grid gap-3 px-5 py-4 sm:grid-cols-3">
+          <div className="rounded-lg border border-border bg-muted/60 p-3">
+            <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+              Start here
+            </p>
+            <p className="mt-1 text-sm text-foreground">
+              Joining documents, ID setup, and first-day guidance.
+            </p>
+          </div>
+          <div className="rounded-lg border border-border bg-muted/60 p-3">
+            <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+              Helpful
+            </p>
+            <p className="mt-1 text-sm text-foreground">
+              Training schedules, safety basics, and plant familiarization.
+            </p>
+          </div>
+          <div className="rounded-lg border border-border bg-muted/60 p-3">
+            <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+              Ask casually
+            </p>
+            <p className="mt-1 text-sm text-foreground">
+              Short questions work best. Try one topic at a time.
+            </p>
+          </div>
+        </div>
+      </motion.section>
+
       {/* Hero + search */}
       <section className="flex flex-col items-center gap-6 pt-2 text-center">
         <div className="flex flex-col items-center gap-3">
-          <Badge variant="secondary" className="gap-1.5">
+          <Badge variant="secondary" className="ntpc-sheen gap-1.5 border-primary/10 bg-accent text-accent-foreground">
             <Sparkles className="size-3.5" aria-hidden="true" />
-            Enterprise Knowledge Assistant
+            NTPC onboarding assistant
           </Badge>
           <h1 className="text-balance text-2xl font-semibold tracking-tight text-foreground md:text-3xl">
-            AI Common Service Chatbot
+            Ask common questions as you get started
           </h1>
           <p className="max-w-2xl text-pretty text-sm leading-relaxed text-muted-foreground md:text-base">
-            Search policies, procedures, manuals, technical documentation, and
-            organizational knowledge.
+            Get quick guidance on joining formalities, HR policies, safety
+            basics, training processes, and everyday NTPC procedures.
           </p>
         </div>
 
         <form
-          className="flex w-full max-w-2xl flex-col gap-3 sm:flex-row"
+          className="animate-soft-rise flex w-full max-w-2xl flex-col gap-3 rounded-xl border border-primary/10 bg-card/82 p-2 shadow-[0_18px_48px_rgb(0_135_201/9%)] backdrop-blur sm:flex-row"
           onSubmit={(e) => {
             e.preventDefault()
             ask(query)
@@ -77,9 +131,9 @@ export default function DashboardPage() {
               ref={inputRef}
               value={query}
               onChange={(e) => setQuery(e.target.value)}
-              placeholder="Ask about safety, HR, technical manuals…"
+              placeholder="Ask about joining, training, leave, safety..."
               aria-label="Ask a question"
-              className="h-12 pl-10 pr-11 text-base"
+              className="h-12 border-transparent bg-transparent pl-10 pr-11 text-base shadow-none transition-shadow duration-200 focus-visible:shadow-sm"
             />
             <Button
               type="button"
@@ -94,7 +148,7 @@ export default function DashboardPage() {
           <Button
             type="submit"
             size="lg"
-            className="h-12 px-6"
+            className="ntpc-sheen h-12 px-6 shadow-[0_10px_24px_rgb(0_135_201/20%)]"
             disabled={loading}
           >
             <Search data-icon="inline-start" />
@@ -108,10 +162,11 @@ export default function DashboardPage() {
             <motion.button
               key={topic}
               type="button"
-              whileHover={{ scale: 1.04 }}
-              transition={{ duration: 0.12 }}
+              whileHover={{ y: -1 }}
+              whileTap={{ scale: 0.99 }}
+              transition={{ duration: 0.16, ease: "easeOut" }}
               onClick={() => ask(`Tell me about ${topic.toLowerCase()}`)}
-              className="rounded-full border border-border bg-card px-3.5 py-1.5 text-sm font-medium text-muted-foreground transition-colors hover:border-primary/40 hover:bg-accent hover:text-accent-foreground"
+              className="rounded-full border border-primary/15 bg-card/88 px-3.5 py-1.5 text-sm font-medium text-muted-foreground shadow-sm backdrop-blur transition-colors duration-200 hover:border-primary/40 hover:bg-accent hover:text-accent-foreground"
             >
               {topic}
             </motion.button>
@@ -137,7 +192,7 @@ export default function DashboardPage() {
         <h2 className="text-lg font-semibold text-foreground">
           Recent Questions
         </h2>
-        <Card className="border-border">
+        <Card className="ntpc-card border-border bg-card/92">
           <CardContent className="p-2">
             <ul className="flex flex-col">
               {recentQuestions.map((rq, i) => (
@@ -145,7 +200,7 @@ export default function DashboardPage() {
                   <button
                     type="button"
                     onClick={() => ask(rq.question)}
-                    className="flex w-full items-center gap-3 rounded-md px-3 py-3 text-left transition-colors hover:bg-secondary"
+                    className="flex w-full items-center gap-3 rounded-md px-3 py-3 text-left transition-all duration-200 hover:translate-x-0.5 hover:bg-secondary"
                   >
                     <span className="flex size-9 shrink-0 items-center justify-center rounded-md bg-accent text-primary">
                       <History className="size-4" aria-hidden="true" />

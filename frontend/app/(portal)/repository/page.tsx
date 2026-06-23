@@ -38,8 +38,8 @@ export default function RepositoryPage() {
           Knowledge Repository
         </h1>
         <p className="text-sm leading-relaxed text-muted-foreground">
-          Search and browse documents, manuals, and policies across the
-          organization.
+          Search and browse onboarding documents, safety basics, HR policies,
+          and training material for new joinees and trainees.
         </p>
       </header>
 
@@ -52,7 +52,7 @@ export default function RepositoryPage() {
         <Input
           value={query}
           onChange={(e) => setQuery(e.target.value)}
-          placeholder="Search documents, manuals, and policies…"
+          placeholder="Search documents, manuals, and policies..."
           aria-label="Search documents"
           className="h-11 pl-10"
         />

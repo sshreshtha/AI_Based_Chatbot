@@ -7,7 +7,7 @@ import { Switch } from "@/components/ui/switch";
 import { Slider } from "@/components/ui/slider";
 
 export const Route = createFileRoute("/settings")({
-  head: () => ({ meta: [{ title: "System Settings — Nexus Knowledge" }] }),
+  head: () => ({ meta: [{ title: "System Settings - NTPC Control Center" }] }),
   component: SettingsPage,
 });
 
@@ -25,7 +25,7 @@ function SettingsPage() {
   const save = (label: string) => toast.success(`${label} saved`);
 
   return (
-    <div className="mx-auto w-full max-w-[1200px] p-4 sm:p-6">
+    <div className="stagger-soft mx-auto w-full max-w-[1200px] p-4 sm:p-6">
       <PageHeader title="System Settings" subtitle="Configure organization, AI, and security preferences." />
 
       <Tabs defaultValue="general">
@@ -43,9 +43,9 @@ function SettingsPage() {
         <TabsContent value="general" className="mt-4">
           <SectionCard title="Organization">
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <Field label="Organization Name" defaultValue="Nexus Power Corporation" />
-              <Field label="System Name" defaultValue="Nexus Knowledge Portal" />
-              <Field label="Contact Email" type="email" defaultValue="admin@nexus.local" />
+              <Field label="Organization Name" defaultValue="NTPC Power Operations" />
+              <Field label="System Name" defaultValue="NTPC Admin Portal" />
+              <Field label="Contact Email" type="email" defaultValue="admin@ntpc.local" />
               <Field label="Time Zone" defaultValue="Asia/Kolkata (UTC+5:30)" />
             </div>
             <div className="mt-4 flex justify-end">

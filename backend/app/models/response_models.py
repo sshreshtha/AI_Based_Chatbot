@@ -56,3 +56,19 @@ class HealthResponse(BaseModel):
     status: str
     database: str
     services: Dict[str, Any]
+
+
+class TicketItem(BaseModel):
+    ticket_id: str
+    question: str
+    email: Optional[str] = None
+    status: str
+    created_at: datetime
+    session_id: Optional[str] = None
+
+
+class AdminOverviewResponse(BaseModel):
+    health: HealthResponse
+    collections: Dict[str, int]
+    recent_queries: List[AnalyticsItem] = Field(default_factory=list)
+    recent_tickets: List[TicketItem] = Field(default_factory=list)
