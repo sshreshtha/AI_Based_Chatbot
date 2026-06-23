@@ -1,37 +1,83 @@
+import { useEffect, useState } from "react";
+
 function App() {
+  const [queries, setQueries] = useState([]);
+  const [answers, setAnswers] = useState({});
+
+  // Fetch queries
+  const fetchQueries = () => {
+    fetch("http://127.0.0.1:8000/queries")
+      .then((res) => res.json())
+      .then((data) => setQueries(data))
+      .catch((err) => console.error(err));
+  };
+
+  useEffect(() => {
+    fetchQueries();
+  }, []);
+
+  // Handle input change
+  const handleChange = (id, value) => {
+    setAnswers({ ...answers, [id]: value });
+  };
+
+  // Submit answer
+  const submitAnswer = (id) => {
+    fetch("http://127.0.0.1:8000/answer", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        id: id,
+        answer: answers[id],
+      }),
+    })
+      .then((res) => res.json())
+      .then(() => {
+        fetchQueries(); // refresh data
+      });
+  };
+
   return (
-    <main className="min-h-screen bg-slate-950 text-slate-100">
-      <section className="mx-auto flex min-h-screen max-w-6xl flex-col justify-center px-6 py-16 lg:px-8">
-        <div className="rounded-3xl border border-white/10 bg-white/6 p-8 shadow-2xl shadow-slate-950/50 backdrop-blur md:p-10">
-          <p className="text-sm uppercase tracking-[0.35em] text-cyan-300">React + Vite + Tailwind</p>
-          <h1 className="mt-4 max-w-3xl text-4xl font-semibold tracking-tight text-white md:text-6xl">
-            A clean starter template for your AI chatbot project.
-          </h1>
-          <p className="mt-6 max-w-2xl text-lg text-slate-300 md:text-xl">
-            This repository is ready to share on GitHub with a minimal frontend and a FastAPI backend.
-          </p>
-          <div className="mt-8 flex flex-wrap gap-4">
-            <a
-              className="rounded-full bg-cyan-400 px-5 py-3 text-sm font-semibold text-slate-950 transition hover:bg-cyan-300"
-              href="https://vite.dev/guide/"
-              target="_blank"
-              rel="noreferrer"
-            >
-              Vite Docs
-            </a>
-            <a
-              className="rounded-full border border-white/15 px-5 py-3 text-sm font-semibold text-slate-200 transition hover:border-cyan-400 hover:text-cyan-200"
-              href="https://tailwindcss.com/docs"
-              target="_blank"
-              rel="noreferrer"
-            >
-              Tailwind Docs
-            </a>
+    <div style={{ padding: "20px", color: "white" }}>
+      <h1>Admin Panel - Queries</h1>
+
+      {queries.length === 0 ? (
+        <p>No queries found</p>
+      ) : (
+        queries.map((q) => (
+          <div
+            key={q.id}
+            style={{
+              border: "1px solid white",
+              padding: "10px",
+              marginBottom: "10px",
+            }}
+          >
+            <p><b>Question:</b> {q.question}</p>
+            <p><b>Email:</b> {q.email}</p>
+            <p><b>Status:</b> {q.status}</p>
+            <p><b>Answer:</b> {q.answer || "Not answered yet"}</p>
+
+            {q.status === "pending" && (
+              <>
+                <input
+                  type="text"
+                  placeholder="Type answer..."
+                  onChange={(e) => handleChange(q.id, e.target.value)}
+                  style={{ marginRight: "10px", padding: "5px" }}
+                />
+                <button onClick={() => submitAnswer(q.id)}>
+                  Submit Answer
+                </button>
+              </>
+            )}
           </div>
-        </div>
-      </section>
-    </main>
-  )
+        ))
+      )}
+    </div>
+  );
 }
 
-export default App
+export default App;
