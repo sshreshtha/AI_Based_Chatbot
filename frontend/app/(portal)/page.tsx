@@ -18,6 +18,7 @@ export default function DashboardPage() {
   const [query, setQuery] = useState("")
   const [loading, setLoading] = useState(false)
   const [result, setResult] = useState<AnswerResult | null>(null)
+  const [error, setError] = useState<string | null>(null)
   const [sessionId] = useState(() => crypto.randomUUID())
   const inputRef = useRef<HTMLInputElement>(null)
   const responseRef = useRef<HTMLDivElement>(null)
@@ -27,10 +28,16 @@ export default function DashboardPage() {
     if (!trimmed) return
     setQuery(trimmed)
     setResult(null)
+    setError(null)
     setLoading(true)
-    const response = await queryChatbot({ query: trimmed, sessionId })
-    setResult(response)
-    setLoading(false)
+    try {
+      const response = await queryChatbot({ query: trimmed, sessionId })
+      setResult(response)
+    } catch {
+      setError("Unable to reach the assistant. Please check that the backend is running.")
+    } finally {
+      setLoading(false)
+    }
     requestAnimationFrame(() =>
       responseRef.current?.scrollIntoView({
         behavior: "smooth",
@@ -175,9 +182,17 @@ export default function DashboardPage() {
       </section>
 
       {/* AI response / loading area */}
-      {(loading || result) && (
+      {(loading || result || error) && (
         <section ref={responseRef} className="mx-auto w-full max-w-2xl scroll-mt-20">
-          {loading ? <TypingIndicator /> : result && <AiResponse result={result} sessionId={sessionId} />}
+          {loading ? (
+            <TypingIndicator />
+          ) : error ? (
+            <Card className="border-destructive/30 bg-destructive/5">
+              <CardContent className="p-5 text-sm text-destructive">{error}</CardContent>
+            </Card>
+          ) : (
+            result && <AiResponse result={result} sessionId={sessionId} />
+          )}
         </section>
       )}
 

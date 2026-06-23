@@ -1,5 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import {
   Upload,
@@ -16,6 +16,7 @@ import {
   CloudUpload,
 } from "lucide-react";
 import { KpiCard, PageHeader, SectionCard, StatusBadge } from "@/components/admin-ui";
+import { fetchAdminOverview, uploadKnowledgePdf, type AdminOverviewResponse } from "@/lib/backend-api";
 import {
   Select,
   SelectContent,
@@ -57,13 +58,47 @@ const activity = [
 function KnowledgePage() {
   const [category, setCategory] = useState("all");
   const [dragOver, setDragOver] = useState(false);
+  const [overview, setOverview] = useState<AdminOverviewResponse | null>(null);
+  const [uploading, setUploading] = useState(false);
+  const inputRef = useRef<HTMLInputElement>(null);
 
   const filtered = category === "all" ? documents : documents.filter((d) => d.category === category);
+  const knowledgeCount = overview?.knowledge_base_count ?? 0;
+  const chunkCount = overview?.collections.knowledge_chunks ?? 0;
+
+  const refreshOverview = () => {
+    fetchAdminOverview().then(setOverview).catch(() => setOverview(null));
+  };
+
+  useEffect(() => {
+    refreshOverview();
+  }, []);
+
+  const uploadFiles = async (files: FileList | null) => {
+    const file = files?.[0];
+    if (!file) return;
+    if (file.type !== "application/pdf" && !file.name.toLowerCase().endsWith(".pdf")) {
+      toast.error("Only PDF uploads are supported by the backend.");
+      return;
+    }
+    setUploading(true);
+    try {
+      const topicName = file.name.replace(/\.[^/.]+$/, "").replace(/_/g, " ");
+      const result = await uploadKnowledgePdf(file, topicName);
+      toast.success("PDF stored in MongoDB", { description: `${result.chunks_stored} chunks added to knowledge_chunks.` });
+      refreshOverview();
+    } catch {
+      toast.error("PDF upload failed", { description: "Check backend and MongoDB connectivity." });
+    } finally {
+      setUploading(false);
+      if (inputRef.current) inputRef.current.value = "";
+    }
+  };
 
   return (
     <div className="stagger-soft mx-auto w-full max-w-[1600px] p-4 sm:p-6">
       <PageHeader title="Knowledge Base Management" subtitle="Manage organizational knowledge used by the AI system.">
-        <button onClick={() => toast.success("Upload dialog opened")} className="inline-flex items-center gap-1.5 h-9 px-3 text-sm bg-primary text-primary-foreground rounded-md hover:bg-primary/90">
+        <button onClick={() => inputRef.current?.click()} className="inline-flex items-center gap-1.5 h-9 px-3 text-sm bg-primary text-primary-foreground rounded-md hover:bg-primary/90">
           <Upload className="h-3.5 w-3.5" /> Upload
         </button>
         <button onClick={() => toast("Reprocessing started")} className="inline-flex items-center gap-1.5 h-9 px-3 text-sm border border-input rounded-md hover:bg-muted">
@@ -78,10 +113,10 @@ function KnowledgePage() {
       </PageHeader>
 
       <div className="grid grid-cols-2 xl:grid-cols-4 gap-3 sm:gap-4">
-        <KpiCard icon={FileText} label="Total Documents" value="780" delay={0} />
-        <KpiCard icon={Layers} label="Total Chunks" value="48,212" delay={0.05} />
-        <KpiCard icon={Database} label="Embedding Coverage" value="98.4%" trend={{ value: 1.2 }} delay={0.1} />
-        <KpiCard icon={CheckCircle2} label="Processing Success" value="99.1%" trend={{ value: 0.4 }} delay={0.15} />
+        <KpiCard icon={FileText} label="Knowledge Records" value={knowledgeCount.toString()} delay={0} />
+        <KpiCard icon={Layers} label="PDF Chunks" value={chunkCount.toString()} delay={0.05} />
+        <KpiCard icon={Database} label="Embedding Storage" value="MongoDB" trend={{ value: 0 }} delay={0.1} />
+        <KpiCard icon={CheckCircle2} label="Upload Status" value={uploading ? "Working" : "Ready"} trend={{ value: 0 }} delay={0.15} />
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 mt-4 sm:mt-6">
@@ -89,7 +124,7 @@ function KnowledgePage() {
           <div
             onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
             onDragLeave={() => setDragOver(false)}
-            onDrop={(e) => { e.preventDefault(); setDragOver(false); toast.success("Files queued for upload"); }}
+            onDrop={(e) => { e.preventDefault(); setDragOver(false); uploadFiles(e.dataTransfer.files); }}
             className={`flex flex-col items-center justify-center text-center border-2 border-dashed rounded-md py-10 px-4 transition-colors ${
               dragOver ? "border-primary bg-primary/5" : "border-border bg-muted/30"
             }`}
@@ -97,8 +132,9 @@ function KnowledgePage() {
             <CloudUpload className="h-8 w-8 text-primary mb-2" />
             <p className="text-sm font-medium text-foreground">Drag and drop files here</p>
             <p className="text-xs text-muted-foreground mt-1">or click to browse from your device</p>
-            <button onClick={() => toast.success("File picker opened")} className="mt-4 inline-flex items-center gap-1.5 h-9 px-3 text-sm bg-primary text-primary-foreground rounded-md hover:bg-primary/90">
-              Browse files
+            <input ref={inputRef} type="file" accept="application/pdf,.pdf" className="hidden" onChange={(event) => uploadFiles(event.target.files)} />
+            <button onClick={() => inputRef.current?.click()} disabled={uploading} className="mt-4 inline-flex items-center gap-1.5 h-9 px-3 text-sm bg-primary text-primary-foreground rounded-md hover:bg-primary/90 disabled:opacity-60">
+              {uploading ? "Uploading" : "Browse files"}
             </button>
           </div>
 

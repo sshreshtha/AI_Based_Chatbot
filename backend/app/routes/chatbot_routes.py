@@ -6,8 +6,9 @@ from pymongo.errors import PyMongoError
 
 from app.config.settings import Settings, get_settings
 from app.database.mongo_client import get_database
-from app.models.request_models import AdminResolveTicketRequest, ChatQueryRequest, TicketCreateRequest
+from app.models.request_models import AdminLoginRequest, AdminResolveTicketRequest, ChatQueryRequest, TicketCreateRequest
 from app.models.response_models import (
+    AdminLoginResponse,
     AdminResolveTicketResponse,
     AdminOverviewResponse,
     AnalyticsItem,
@@ -40,6 +41,8 @@ COLLECTION_NAMES = [
     "query_analytics",
     "topic_aliases",
     "tickets",
+    "admins",
+    "system_logs",
 ]
 
 
@@ -78,7 +81,20 @@ def query_chatbot(payload: ChatQueryRequest, services: Annotated[dict, Depends(g
             else cached_answer or services["gemini"].generate_answer(payload.query, context)
         )
 
-        if not cached and not ticket_suggested:
+        if ticket_suggested:
+            return ChatQueryResponse(
+                answer=answer,
+                mapped_topic=mapped_topic,
+                confidence=confidence,
+                ticket_required=True,
+                ticket_suggested=True,
+                ticket_id=None,
+                cached=False,
+                sources=sources,
+                session_id=payload.session_id,
+            )
+
+        if not cached:
             services["cache"].store_answer(mapped_topic, payload.query, answer)
 
         services["analytics"].record(payload.query, mapped_topic, score, answer, payload.session_id)
@@ -117,6 +133,26 @@ def create_ticket(payload: TicketCreateRequest, services: Annotated[dict, Depend
         raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="Database unavailable") from exc
 
 
+@router.post("/admin/login", response_model=AdminLoginResponse, summary="Validate admin credentials")
+def admin_login(payload: AdminLoginRequest, services: Annotated[dict, Depends(get_services)]) -> AdminLoginResponse:
+    credential = payload.username.strip()
+    admin = services["db"].admins.find_one(
+        {"$or": [{"email": credential}, {"username": credential}]},
+        {"password": 1, "password_hash": 1, "name": 1, "email": 1, "username": 1},
+    )
+    if not admin:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid admin credentials")
+    stored_password = admin.get("password") or admin.get("password_hash")
+    if stored_password != payload.password:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid admin credentials")
+    return AdminLoginResponse(
+        authenticated=True,
+        admin_id=str(admin.get("_id")),
+        name=admin.get("name") or admin.get("username") or admin.get("email"),
+        email=admin.get("email"),
+    )
+
+
 @router.get("/tickets", response_model=list[TicketItem], summary="List admin ticket queue")
 def list_tickets(
     services: Annotated[dict, Depends(get_services)],
@@ -128,7 +164,7 @@ def list_tickets(
             ticket_id=services["tickets"].stringify_id(item),
             question=item["question"],
             email=item.get("email"),
-            status=item.get("status", "open"),
+            status="pending" if item.get("status") == "open" else item.get("status", "pending"),
             created_at=item["created_at"],
             resolved_at=item.get("resolved_at"),
             session_id=item.get("session_id"),
@@ -150,6 +186,8 @@ def resolve_ticket(
     ticket = services["tickets"].get_ticket(ticket_id)
     if not ticket:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Ticket not found")
+    if ticket.get("status") not in {"pending", "open"}:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Only pending tickets can be resolved")
 
     canonical_ticket_id = services["tickets"].stringify_id(ticket)
     resolution = services["admin_resolutions"].store_resolution(
@@ -187,22 +225,16 @@ async def upload_pdf(
     if file.content_type not in {"application/pdf", "application/octet-stream"}:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Only PDF uploads are supported")
     pdf_bytes = await file.read()
+    source_document = file.filename or "uploaded.pdf"
     try:
-        import fitz
-
-        doc = fitz.open(stream=pdf_bytes, filetype="pdf")
-        text = ""
-        for page in doc:
-            text += page.get_text()
-    except ImportError as exc:
-        raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="PyMuPDF is not installed") from exc
+        chunks_stored = services["ingestion"].ingest_pdf_bytes(pdf_bytes, source_document, topic)
+    except RuntimeError as exc:
+        raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=str(exc)) from exc
     except Exception as exc:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="PDF could not be processed") from exc
-
-    chunks_stored = services["ingestion"].store_pdf_text(text, file.filename or "uploaded.pdf", topic)
     return UploadResponse(
         message="PDF uploaded and stored in MongoDB",
-        source_document=file.filename or "uploaded.pdf",
+        source_document=source_document,
         chunks_stored=chunks_stored,
     )
 
@@ -263,6 +295,11 @@ def admin_overview(services: Annotated[dict, Depends(get_services)]) -> AdminOve
     health_response = health(services)
     db = services["db"]
     collections = {name: db[name].estimated_document_count() for name in COLLECTION_NAMES}
+    total_tickets = services["tickets"].collection.count_documents({})
+    pending_tickets = services["tickets"].collection.count_documents({"status": {"$in": ["pending", "open"]}})
+    resolved_tickets = services["tickets"].collection.count_documents({"status": "resolved"})
+    knowledge_base_count = collections.get("knowledge_chunks", 0) + collections.get("admin_resolutions", 0)
+    analytics_count = collections.get("query_analytics", 0)
     recent_queries = [
         AnalyticsItem(
             query=item["query"],
@@ -278,7 +315,7 @@ def admin_overview(services: Annotated[dict, Depends(get_services)]) -> AdminOve
             ticket_id=services["tickets"].stringify_id(item),
             question=item["question"],
             email=item.get("email"),
-            status=item.get("status", "open"),
+            status="pending" if item.get("status") == "open" else item.get("status", "pending"),
             created_at=item["created_at"],
             resolved_at=item.get("resolved_at"),
             session_id=item.get("session_id"),
@@ -288,6 +325,11 @@ def admin_overview(services: Annotated[dict, Depends(get_services)]) -> AdminOve
     return AdminOverviewResponse(
         health=health_response,
         collections=collections,
+        total_tickets=total_tickets,
+        pending_tickets=pending_tickets,
+        resolved_tickets=resolved_tickets,
+        knowledge_base_count=knowledge_base_count,
+        analytics_count=analytics_count,
         recent_queries=recent_queries,
         recent_tickets=recent_tickets,
     )

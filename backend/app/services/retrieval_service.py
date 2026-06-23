@@ -62,7 +62,10 @@ class RetrievalService:
         return [self._to_source_document(collection_name, item) for item in documents]
 
     def _to_source_document(self, collection_name: str, item: dict) -> SourceDocument:
-        content = item.get("content") or item.get("text") or item.get("answer") or item.get("title") or ""
+        if collection_name == "admin_resolutions":
+            content = item.get("text") or item.get("answer") or item.get("question") or ""
+        else:
+            content = item.get("text") or item.get("content") or item.get("answer") or item.get("title") or ""
         preview = str(content).strip()
         return SourceDocument(
             id=str(item.get("_id") if isinstance(item.get("_id"), ObjectId) else item.get("_id")),

@@ -1,4 +1,13 @@
-from config.database import db
+from pathlib import Path
+import sys
+
+BACKEND_DIR = Path(__file__).resolve().parent / "backend"
+if str(BACKEND_DIR) not in sys.path:
+    sys.path.insert(0, str(BACKEND_DIR))
+
+from app.database.mongo_client import get_database
+
+db = get_database()
 
 collections = [
     "knowledge_chunks",
@@ -7,7 +16,8 @@ collections = [
     "admins",
     "response_cache",
     "query_analytics",
-    "topic_aliases"
+    "topic_aliases",
+    "system_logs",
 ]
 
 for collection in collections:

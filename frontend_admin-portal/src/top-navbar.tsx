@@ -1,6 +1,6 @@
-import { Bell, Search, Menu, ChevronRight, User, Settings, LogOut, Sparkles } from "lucide-react";
+import { Bell, Search, Menu, ChevronRight, User, Settings, Sparkles } from "lucide-react";
 import { useRouterState, Link } from "@tanstack/react-router";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Sheet, SheetContent, SheetTrigger, SheetTitle, SheetHeader } from "@/components/ui/sheet";
 import {
   DropdownMenu,
@@ -16,6 +16,7 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover";
 import { MobileSidebar, adminNav } from "./app-sidebar";
+import { fetchPendingTickets, BackendApiError, type TicketRecord } from "@/lib/backend-api";
 
 const titleMap: Record<string, string> = {
   "/": "Dashboard",
@@ -25,16 +26,47 @@ const titleMap: Record<string, string> = {
   "/settings": "System Settings",
 };
 
-const notifications = [
-  { id: 1, title: "New ticket escalated", desc: "TKT-2049 marked as high priority", time: "5m ago" },
-  { id: 2, title: "Knowledge base synced", desc: "428 documents reprocessed", time: "1h ago" },
-  { id: 3, title: "Confidence threshold alert", desc: "Average score dropped below 0.7", time: "3h ago" },
-];
-
-export function TopNavbar() {
+export function TopNavbar({ adminName }: { adminName: string }) {
   const [open, setOpen] = useState(false);
+  const [notifications, setNotifications] = useState<TicketRecord[]>([]);
+  const [notifyError, setNotifyError] = useState<string | null>(null);
   const pathname = useRouterState({ select: (s) => s.location.pathname });
   const current = titleMap[pathname] ?? "Admin";
+
+  useEffect(() => {
+    let active = true;
+    const load = () => {
+      fetchPendingTickets(5)
+        .then((records) => {
+          if (active) {
+            setNotifications(records);
+            setNotifyError(null);
+          }
+        })
+        .catch((err) => {
+          if (active) {
+            setNotifications([]);
+            setNotifyError(
+              err instanceof BackendApiError
+                ? err.message
+                : "Backend unavailable",
+            );
+          }
+        });
+    };
+    load();
+    const id = window.setInterval(load, 10000);
+    const onFocus = () => load();
+    window.addEventListener("focus", onFocus);
+    document.addEventListener("visibilitychange", () => {
+      if (document.visibilityState === "visible") load();
+    });
+    return () => {
+      active = false;
+      window.clearInterval(id);
+      window.removeEventListener("focus", onFocus);
+    };
+  }, []);
 
   return (
     <header className="sticky top-0 z-30 flex h-16 items-center gap-3 border-b border-border bg-card/90 px-3 shadow-[0_8px_28px_rgb(8_125_182/6%)] backdrop-blur supports-[backdrop-filter]:bg-card/78 md:px-6">
@@ -88,21 +120,33 @@ export function TopNavbar() {
               aria-label="Notifications"
             >
               <Bell className="h-4 w-4" />
-              <span className="absolute top-1.5 right-1.5 h-2 w-2 rounded-full bg-destructive" />
+              {notifications.length > 0 && <span className="absolute top-1.5 right-1.5 h-2 w-2 rounded-full bg-destructive" />}
             </button>
           </PopoverTrigger>
           <PopoverContent align="end" className="w-80 p-0">
             <div className="px-4 py-3 border-b border-border">
               <p className="text-sm font-semibold">Notifications</p>
-              <p className="text-xs text-muted-foreground">{notifications.length} unread</p>
+              <p className="text-xs text-muted-foreground">
+                {notifyError ?? `${notifications.length} pending ticket${notifications.length === 1 ? "" : "s"}`}
+              </p>
             </div>
             <div className="max-h-80 overflow-auto">
+              {notifyError && (
+                <div className="px-4 py-6 text-sm text-destructive">{notifyError}</div>
+              )}
+              {!notifyError && notifications.length === 0 && (
+                <div className="px-4 py-6 text-sm text-muted-foreground">No pending tickets.</div>
+              )}
               {notifications.map((n) => (
-                <div key={n.id} className="px-4 py-3 border-b border-border last:border-0 hover:bg-muted/50">
-                  <p className="text-sm font-medium">{n.title}</p>
-                  <p className="text-xs text-muted-foreground mt-0.5">{n.desc}</p>
-                  <p className="text-[11px] text-muted-foreground mt-1">{n.time}</p>
-                </div>
+                <Link
+                  key={n.ticket_id}
+                  to="/tickets"
+                  className="block px-4 py-3 border-b border-border last:border-0 hover:bg-muted/50"
+                >
+                  <p className="text-sm font-medium">Pending ticket {n.ticket_id}</p>
+                  <p className="text-xs text-muted-foreground mt-0.5">{n.question}</p>
+                  <p className="text-[11px] text-muted-foreground mt-1">{new Date(n.created_at).toLocaleString()}</p>
+                </Link>
               ))}
             </div>
           </PopoverContent>
@@ -115,7 +159,7 @@ export function TopNavbar() {
                 AS
               </div>
               <div className="hidden sm:flex flex-col leading-tight text-left">
-                <span className="text-xs font-medium text-foreground">Alex Smith</span>
+                <span className="text-xs font-medium text-foreground">{adminName}</span>
                 <span className="text-[11px] text-muted-foreground">Administrator</span>
               </div>
             </button>
@@ -126,10 +170,6 @@ export function TopNavbar() {
             <DropdownMenuItem><User className="h-4 w-4 mr-2" />Profile</DropdownMenuItem>
             <DropdownMenuItem asChild>
               <Link to="/settings"><Settings className="h-4 w-4 mr-2" />Settings</Link>
-            </DropdownMenuItem>
-            <DropdownMenuSeparator />
-            <DropdownMenuItem className="text-destructive">
-              <LogOut className="h-4 w-4 mr-2" />Sign out
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>

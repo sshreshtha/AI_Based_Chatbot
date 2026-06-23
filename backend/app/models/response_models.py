@@ -77,6 +77,13 @@ class AdminResolveTicketResponse(BaseModel):
     resolved_at: datetime
 
 
+class AdminLoginResponse(BaseModel):
+    authenticated: bool
+    admin_id: Optional[str] = None
+    name: Optional[str] = None
+    email: Optional[str] = None
+
+
 class UploadResponse(BaseModel):
     message: str
     source_document: str
@@ -87,5 +94,10 @@ class UploadResponse(BaseModel):
 class AdminOverviewResponse(BaseModel):
     health: HealthResponse
     collections: Dict[str, int]
+    total_tickets: int = 0
+    pending_tickets: int = 0
+    resolved_tickets: int = 0
+    knowledge_base_count: int = 0
+    analytics_count: int = 0
     recent_queries: List[AnalyticsItem] = Field(default_factory=list)
     recent_tickets: List[TicketItem] = Field(default_factory=list)

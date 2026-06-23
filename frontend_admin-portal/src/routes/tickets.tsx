@@ -15,7 +15,7 @@ import {
   Sparkles,
 } from "lucide-react";
 import { KpiCard, PageHeader, SectionCard, StatusBadge } from "@/components/admin-ui";
-import { fetchTickets, resolveTicket, type TicketRecord } from "@/lib/backend-api";
+import { fetchPendingTickets, resolveTicket, BackendApiError, type TicketRecord } from "@/lib/backend-api";
 import {
   Select,
   SelectContent,
@@ -33,55 +33,54 @@ type Ticket = {
   id: string;
   question: string;
   priority: "Low" | "Medium" | "High" | "Critical";
-  status: "Open" | "In Progress" | "Escalated" | "Resolved";
+  status: "Pending" | "In Progress" | "Escalated" | "Resolved";
   created: string;
+  email: string | null;
   aiSummary: string;
   aiResponse: string;
   related: string[];
 };
 
-const fallbackTickets: Ticket[] = [
-  { id: "TKT-2049", question: "What is the latest FGD operating parameter range for Unit 4?", priority: "High", status: "Open", created: "2026-06-22", aiSummary: "Retrieved 3 chunks from Operations Manual v4.2, low confidence on Unit 4 specifics.", aiResponse: "Based on the Operations Manual, the FGD parameters typically range from ... However, Unit 4 specific updates from 2025 are not present in the index.", related: ["Operations Manual v4.2", "FGD SOP 2023"] },
-  { id: "TKT-2048", question: "How do I file a leave encashment request under the new policy?", priority: "Medium", status: "In Progress", created: "2026-06-22", aiSummary: "Matched HR Policy 2024 sections 4.2-4.5.", aiResponse: "Submit Form HR-LE-12 via the employee self-service portal under Leave > Encashment.", related: ["HR Policy 2024", "Self-Service Portal Guide"] },
-  { id: "TKT-2047", question: "Turbine vibration alarm thresholds for maintenance?", priority: "High", status: "Escalated", created: "2026-06-21", aiSummary: "Insufficient data - needs SME review.", aiResponse: "", related: ["Maintenance Procedures v3"] },
-  { id: "TKT-2046", question: "Coal handling emergency shutdown SOP location?", priority: "Critical", status: "Open", created: "2026-06-21", aiSummary: "Found reference in Safety Bulletin 2024-08.", aiResponse: "Refer to Safety Bulletin 2024-08, section 3.1 for the emergency shutdown sequence.", related: ["Safety Bulletin 2024-08"] },
-  { id: "TKT-2045", question: "How to register for ISO 55001 internal audit training?", priority: "Low", status: "Resolved", created: "2026-06-20", aiSummary: "Resolved via LMS link.", aiResponse: "Register through the LMS at learning.nexus/iso55001.", related: ["Compliance Training Catalog"] },
-  { id: "TKT-2044", question: "Cybersecurity incident reporting timeline?", priority: "Medium", status: "Open", created: "2026-06-20", aiSummary: "Pulled from IT Security Policy 2025.", aiResponse: "Report within 1 hour to the SOC at soc@nexus.local.", related: ["IT Security Policy 2025"] },
-];
-
 function TicketsPage() {
-  const [liveTickets, setLiveTickets] = useState<Ticket[] | null>(null);
+  const [liveTickets, setLiveTickets] = useState<Ticket[]>([]);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [search, setSearch] = useState("");
   const [priority, setPriority] = useState("all");
   const [status, setStatus] = useState("all");
-  const tickets = liveTickets ?? fallbackTickets;
+  const tickets = liveTickets;
 
   useEffect(() => {
     let active = true;
-    fetchTickets(50)
+    const load = () => fetchPendingTickets(50)
       .then((records) => {
         if (active) {
           setLiveTickets(records.map(mapTicketRecord));
           setLoadError(null);
         }
       })
-      .catch(() => {
+      .catch((err) => {
         if (active) {
-          setLoadError("Live Mongo ticket queue unavailable");
+          const message =
+            err instanceof BackendApiError
+              ? err.message
+              : "Live Mongo ticket queue unavailable";
+          setLoadError(message);
         }
       });
+    load();
+    const id = window.setInterval(load, 10000);
     return () => {
       active = false;
+      window.clearInterval(id);
     };
   }, []);
 
-  const [selectedId, setSelectedId] = useState<string>(tickets[0].id);
-  const [draft, setDraft] = useState(tickets[0].aiResponse);
+  const [selectedId, setSelectedId] = useState<string>("");
+  const [draft, setDraft] = useState("");
   const [resolving, setResolving] = useState(false);
 
   const loadTickets = () => {
-    return fetchTickets(50).then((records) => {
+    return fetchPendingTickets(50).then((records) => {
       setLiveTickets(records.map(mapTicketRecord));
       setLoadError(null);
     });
@@ -94,10 +93,10 @@ function TicketsPage() {
       if (search && !t.question.toLowerCase().includes(search.toLowerCase()) && !t.id.toLowerCase().includes(search.toLowerCase())) return false;
       return true;
     });
-  }, [search, priority, status]);
+  }, [search, priority, status, tickets]);
 
-  const selected = tickets.find((t) => t.id === selectedId) ?? tickets[0];
-  const openTickets = tickets.filter((t) => t.status === "Open").length;
+  const selected = tickets.find((t) => t.id === selectedId) ?? tickets[0] ?? null;
+  const pendingTickets = tickets.filter((t) => t.status === "Pending").length;
   const escalatedTickets = tickets.filter((t) => t.status === "Escalated").length;
 
   useEffect(() => {
@@ -107,18 +106,18 @@ function TicketsPage() {
     const selectedTicket = tickets.find((t) => t.id === selectedId);
     if (!selectedTicket) {
       setSelectedId(tickets[0].id);
-      setDraft(tickets[0].aiResponse);
+      setDraft("");
     }
   }, [tickets, selectedId]);
 
   const onSelect = (id: string) => {
     setSelectedId(id);
     const t = tickets.find((x) => x.id === id);
-    setDraft(t?.aiResponse ?? "");
+    setDraft("");
   };
 
   const onResolve = async () => {
-    if (!selected || !draft.trim() || resolving) return;
+    if (!selected || selected.status !== "Pending" || !draft.trim() || resolving) return;
     setResolving(true);
     try {
       const result = await resolveTicket(selected.id, draft.trim());
@@ -141,8 +140,8 @@ function TicketsPage() {
       />
 
       <div className="grid grid-cols-2 xl:grid-cols-4 gap-3 sm:gap-4">
-        <KpiCard icon={TicketIcon} label="Open Tickets" value={openTickets.toString()} trend={{ value: 4.2, positive: false }} delay={0} />
-        <KpiCard icon={CheckCircle2} label="Resolved Today" value="42" trend={{ value: 12 }} delay={0.05} />
+        <KpiCard icon={TicketIcon} label="Pending Tickets" value={pendingTickets.toString()} trend={{ value: 0 }} delay={0} />
+        <KpiCard icon={CheckCircle2} label="Loaded Queue" value={tickets.length.toString()} trend={{ value: 0 }} delay={0.05} />
         <KpiCard icon={Clock} label="Avg. Resolution" value="3h 12m" trend={{ value: 8 }} delay={0.1} />
         <KpiCard icon={AlertTriangle} label="Escalated" value={escalatedTickets.toString()} trend={{ value: 1.5, positive: false }} delay={0.15} />
       </div>
@@ -173,7 +172,7 @@ function TicketsPage() {
               <SelectTrigger className="h-9 w-full sm:w-36"><SelectValue placeholder="Status" /></SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">All statuses</SelectItem>
-                <SelectItem value="Open">Open</SelectItem>
+                <SelectItem value="Pending">Pending</SelectItem>
                 <SelectItem value="In Progress">In Progress</SelectItem>
                 <SelectItem value="Escalated">Escalated</SelectItem>
                 <SelectItem value="Resolved">Resolved</SelectItem>
@@ -216,13 +215,15 @@ function TicketsPage() {
           </div>
         </SectionCard>
 
-        <SectionCard
-          title={`Ticket Details - ${selected.id}`}
-          description={selected.question}
-          className="xl:col-span-2"
-        >
+        <SectionCard title={selected ? `Ticket Details - ${selected.id}` : "Ticket Details"} description={selected?.question ?? "Select a pending ticket."} className="xl:col-span-2">
+          {!selected ? (
+            <div className="py-10 text-center text-sm text-muted-foreground">No pending tickets in MongoDB.</div>
+          ) : (
           <div className="space-y-4">
             <DetailBlock icon={Sparkles} label="AI Retrieval Summary">{selected.aiSummary}</DetailBlock>
+            <DetailBlock icon={TicketIcon} label="User Metadata">
+              <p className="text-sm text-muted-foreground">{selected.email ?? "No email"} - {selected.created}</p>
+            </DetailBlock>
             <DetailBlock icon={BookOpenCheck} label="Suggested AI Response">
               <p className="text-sm text-muted-foreground">{selected.aiResponse || "No response generated - confidence below threshold."}</p>
             </DetailBlock>
@@ -256,7 +257,7 @@ function TicketsPage() {
               </button>
               <button
                 onClick={onResolve}
-                disabled={!draft.trim() || resolving}
+                disabled={!draft.trim() || resolving || selected.status !== "Pending"}
                 className="inline-flex items-center gap-1.5 h-9 px-3 text-sm bg-primary text-primary-foreground rounded-md hover:bg-primary/90"
               >
                 <Send className="h-3.5 w-3.5" /> {resolving ? "Resolving" : "Resolve"}
@@ -275,6 +276,7 @@ function TicketsPage() {
               </button>
             </div>
           </div>
+          )}
         </SectionCard>
       </div>
     </div>
@@ -286,10 +288,11 @@ function mapTicketRecord(record: TicketRecord): Ticket {
   return {
     id: record.ticket_id,
     question: record.question,
+    email: record.email,
     priority: inferPriority(record.question),
     status,
     created: new Date(record.created_at).toISOString().slice(0, 10),
-    aiSummary: `Stored in MongoDB tickets collection${record.email ? ` for ${record.email}` : ""}.`,
+    aiSummary: `Pending MongoDB ticket${record.email ? ` for ${record.email}` : ""}.`,
     aiResponse: status === "Resolved" ? "Marked resolved from the admin portal." : "Awaiting admin review.",
     related: record.session_id ? [`Session ${record.session_id}`] : ["MongoDB tickets collection"],
   };
@@ -308,7 +311,7 @@ function normalizeStatus(status: string): Ticket["status"] {
   if (text.includes("progress")) return "In Progress";
   if (text.includes("escalat")) return "Escalated";
   if (text.includes("resolv")) return "Resolved";
-  return "Open";
+  return "Pending";
 }
 
 function DetailBlock({ icon: Icon, label, children }: { icon: any; label: string; children: React.ReactNode }) {

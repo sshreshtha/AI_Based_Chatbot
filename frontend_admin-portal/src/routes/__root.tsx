@@ -143,7 +143,7 @@ function RootComponent() {
         </div>
         <AppSidebar collapsed={collapsed} onToggle={() => setCollapsed((value) => !value)} />
         <div className="flex min-w-0 flex-1 flex-col">
-          <TopNavbar />
+          <TopNavbar adminName="Admin" />
           <main className="flex-1 overflow-auto">
             <Outlet />
           </main>

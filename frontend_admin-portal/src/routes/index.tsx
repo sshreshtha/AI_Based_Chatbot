@@ -26,7 +26,7 @@ import {
   ResponsiveContainer,
 } from "recharts";
 import { KpiCard, PageHeader, SectionCard, StatusBadge } from "@/components/admin-ui";
-import { fetchAdminOverview, type AdminOverviewResponse } from "@/lib/backend-api";
+import { fetchAdminOverview, BackendApiError, type AdminOverviewResponse } from "@/lib/backend-api";
 
 export const Route = createFileRoute("/")({
   head: () => ({
@@ -64,14 +64,6 @@ const kbGrowth = [
   { month: "Jun", docs: 780 },
 ];
 
-const recent = [
-  { q: "How to reset access card?", status: "Resolved", date: "2026-06-21", admin: "A. Smith" },
-  { q: "Turbine vibration thresholds", status: "In Progress", date: "2026-06-21", admin: "R. Mehta" },
-  { q: "HR leave policy clarification", status: "Resolved", date: "2026-06-20", admin: "L. Chen" },
-  { q: "Coal handling shutdown SOP", status: "Escalated", date: "2026-06-20", admin: "M. Patel" },
-  { q: "Compliance reporting cadence", status: "Open", date: "2026-06-19", admin: "Unassigned" },
-];
-
 const gaps = [
   { topic: "FGD operating parameters (2025 update)", count: 42, type: "Unanswered" },
   { topic: "New leave encashment policy", count: 31, type: "Emerging" },
@@ -91,29 +83,38 @@ function DashboardPage() {
 
   useEffect(() => {
     let active = true;
-    fetchAdminOverview()
+    const load = () => fetchAdminOverview()
       .then((data) => {
         if (active) {
           setOverview(data);
           setOverviewError(null);
         }
       })
-      .catch(() => {
+      .catch((err) => {
         if (active) {
-          setOverviewError("Live Mongo snapshot unavailable");
+          setOverviewError(
+            err instanceof BackendApiError
+              ? err.message
+              : "Live Mongo snapshot unavailable",
+          );
         }
       });
+    load();
+    const id = window.setInterval(load, 15000);
     return () => {
       active = false;
+      window.clearInterval(id);
     };
   }, []);
 
   const collectionCount = overview?.collections ?? {};
-  const totalKnowledgeDocs = (collectionCount.knowledge_chunks ?? 0) + (collectionCount.admin_resolutions ?? 0);
+  const totalKnowledgeDocs = overview?.knowledge_base_count ?? (collectionCount.knowledge_chunks ?? 0) + (collectionCount.admin_resolutions ?? 0);
   const activeResponses = collectionCount.response_cache ?? 0;
   const topicAliases = collectionCount.topic_aliases ?? 0;
-  const queryRecords = collectionCount.query_analytics ?? 0;
-  const ticketRecords = collectionCount.tickets ?? 0;
+  const queryRecords = overview?.analytics_count ?? collectionCount.query_analytics ?? 0;
+  const ticketRecords = overview?.total_tickets ?? collectionCount.tickets ?? 0;
+  const pendingTickets = overview?.pending_tickets ?? 0;
+  const resolvedTickets = overview?.resolved_tickets ?? 0;
 
   return (
     <div className="stagger-soft mx-auto w-full max-w-[1600px] p-4 sm:p-6">
@@ -123,10 +124,10 @@ function DashboardPage() {
       />
 
       <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-3 sm:gap-4">
-        <KpiCard icon={MessageSquare} label="Total Queries" value="12,480" trend={{ value: 8.4 }} description="Last 30 days" delay={0} />
-        <KpiCard icon={Ticket} label="Pending Tickets" value="184" trend={{ value: 2.1, positive: false }} description="Across all queues" delay={0.05} />
-        <KpiCard icon={CheckCircle2} label="Resolved Tickets" value="1,920" trend={{ value: 12.3 }} description="This month" delay={0.1} />
-        <KpiCard icon={BookOpen} label="Knowledge Articles" value="780" trend={{ value: 5.6 }} description="Active in index" delay={0.15} />
+        <KpiCard icon={MessageSquare} label="Total Queries" value={queryRecords.toString()} trend={{ value: 0 }} description="Mongo query_analytics" delay={0} />
+        <KpiCard icon={Ticket} label="Pending Tickets" value={pendingTickets.toString()} trend={{ value: 0, positive: pendingTickets === 0 }} description="tickets.status = pending" delay={0.05} />
+        <KpiCard icon={CheckCircle2} label="Resolved Tickets" value={resolvedTickets.toString()} trend={{ value: 0 }} description="tickets.status = resolved" delay={0.1} />
+        <KpiCard icon={BookOpen} label="Knowledge Articles" value={totalKnowledgeDocs.toString()} trend={{ value: 0 }} description="knowledge + learned answers" delay={0.15} />
       </div>
 
       <SectionCard
@@ -228,14 +229,17 @@ function DashboardPage() {
                 </tr>
               </thead>
               <tbody>
-                {recent.map((r, i) => (
-                  <tr key={i} className="border-b border-border last:border-0 hover:bg-muted/40">
-                    <td className="py-2.5 px-3 text-foreground">{r.q}</td>
-                    <td className="py-2.5 px-3"><StatusBadge status={r.status} /></td>
-                    <td className="py-2.5 px-3 text-muted-foreground">{r.date}</td>
-                    <td className="py-2.5 px-3 text-muted-foreground">{r.admin}</td>
+                {(overview?.recent_tickets ?? []).map((r) => (
+                  <tr key={r.ticket_id} className="border-b border-border last:border-0 hover:bg-muted/40">
+                    <td className="py-2.5 px-3 text-foreground">{r.question}</td>
+                    <td className="py-2.5 px-3"><StatusBadge status={formatStatus(r.status)} /></td>
+                    <td className="py-2.5 px-3 text-muted-foreground">{new Date(r.created_at).toLocaleDateString()}</td>
+                    <td className="py-2.5 px-3 text-muted-foreground">{r.email ?? "Unassigned"}</td>
                   </tr>
                 ))}
+                {(overview?.recent_tickets ?? []).length === 0 && (
+                  <tr><td colSpan={4} className="py-8 text-center text-sm text-muted-foreground">No live ticket activity yet.</td></tr>
+                )}
               </tbody>
             </table>
           </div>
@@ -259,6 +263,14 @@ function DashboardPage() {
       </div>
     </div>
   );
+}
+
+function formatStatus(status: string) {
+  const value = status.toLowerCase();
+  if (value.includes("resolv")) return "Resolved";
+  if (value.includes("progress")) return "In Progress";
+  if (value.includes("escalat")) return "Escalated";
+  return "Pending";
 }
 
 function LiveStat({ label, value }: { label: string; value: string | number }) {

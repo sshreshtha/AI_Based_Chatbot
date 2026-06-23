@@ -19,7 +19,7 @@ class TicketService:
             "question": question,
             "email": email,
             "session_id": session_id,
-            "status": "open",
+            "status": "pending",
             "created_at": now,
             "resolved_at": None,
         }
@@ -29,6 +29,8 @@ class TicketService:
 
     def list_tickets(self, limit: int, status: Optional[str] = None) -> list[dict]:
         query = {"status": status} if status else {}
+        if status == "pending":
+            query = {"status": {"$in": ["pending", "open"]}}
         return list(self.collection.find(query).sort("created_at", -1).limit(limit))
 
     def get_ticket(self, ticket_id: str) -> Optional[dict]:

@@ -29,10 +29,12 @@ class EmailService:
             f"Answer:\n{answer}\n"
         )
 
-        with smtplib.SMTP(self.settings.smtp_host, self.settings.smtp_port, timeout=15) as smtp:
-            if self.settings.smtp_use_tls:
-                smtp.starttls()
-            if self.settings.smtp_username:
-                smtp.login(self.settings.smtp_username, self.settings.smtp_password)
-            smtp.send_message(message)
-        return True
+        # Temporarily disabled for testing — re-enable smtp.send_message when going live.
+        logger.info("Email send disabled for testing; would notify %s for ticket %s", to_email, ticket_id)
+        # with smtplib.SMTP(self.settings.smtp_host, self.settings.smtp_port, timeout=15) as smtp:
+        #     if self.settings.smtp_use_tls:
+        #         smtp.starttls()
+        #     if self.settings.smtp_username:
+        #         smtp.login(self.settings.smtp_username, self.settings.smtp_password)
+        #     smtp.send_message(message)
+        return False

@@ -5,6 +5,8 @@ from typing import List
 from pydantic import AliasChoices, Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+PROJECT_ROOT = Path(__file__).resolve().parents[3]
+
 
 class Settings(BaseSettings):
     """Environment-backed runtime configuration for Module 4."""
@@ -15,8 +17,14 @@ class Settings(BaseSettings):
         default_factory=lambda: [
             "http://localhost:3000",
             "http://localhost:3001",
+            "http://localhost:5173",
+            "http://localhost:8080",
+            "http://localhost:8081",
             "http://127.0.0.1:3000",
             "http://127.0.0.1:3001",
+            "http://127.0.0.1:5173",
+            "http://127.0.0.1:8080",
+            "http://127.0.0.1:8081",
         ],
         validation_alias=AliasChoices("CORS_ORIGINS"),
     )
@@ -26,9 +34,12 @@ class Settings(BaseSettings):
         validation_alias=AliasChoices("MONGO_URI", "MONGODB_URI"),
     )
     mongodb_database: str = Field(
-        default="ai_chatbot",
-        validation_alias=AliasChoices("MONGO_DB", "MONGODB_DATABASE"),
+        default="ai_chatbot_db",
+        validation_alias=AliasChoices("MONGO_DB", "MONGODB_DATABASE", "DATABASE_NAME"),
     )
+
+    local_pdf_dir: str = Field(default="data/knowledge", validation_alias="LOCAL_PDF_DIR")
+    auto_ingest_local_pdfs: bool = Field(default=True, validation_alias="AUTO_INGEST_LOCAL_PDFS")
 
     embedding_model_name: str = Field(default="sentence-transformers/all-MiniLM-L6-v2")
     vector_index_name: str = Field(default="vector_index", validation_alias="VECTOR_INDEX_NAME")
@@ -71,6 +82,13 @@ class Settings(BaseSettings):
             items = [item.strip() for item in value.split(",")]
             return [item for item in items if item]
         return value
+
+    @property
+    def resolved_local_pdf_dir(self) -> Path:
+        path = Path(self.local_pdf_dir)
+        if path.is_absolute():
+            return path
+        return (PROJECT_ROOT / path).resolve()
 
 
 @lru_cache

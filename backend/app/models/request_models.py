@@ -63,10 +63,6 @@ class AdminResolveTicketRequest(BaseModel):
         return answer
 
 
-class HistoryQuery(BaseModel):
-    session_id: Optional[str] = None
-    limit: int = Field(default=20, ge=1, le=100)
-
-
-class AnalyticsQuery(BaseModel):
-    limit: int = Field(default=20, ge=1, le=100)
+class AdminLoginRequest(BaseModel):
+    username: str = Field(..., min_length=1, max_length=200)
+    password: str = Field(..., min_length=1, max_length=200)

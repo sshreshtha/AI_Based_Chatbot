@@ -1,4 +1,4 @@
-import { generateAnswer, type AnswerResult, type SourceDoc } from "@/lib/mock-answer"
+import type { AnswerResult, SourceDoc } from "@/lib/mock-answer"
 
 const DEFAULT_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8000"
 
@@ -85,8 +85,9 @@ export async function queryChatbot(input: {
       confidence,
       sources: mapSources(data.sources ?? []),
     }
-  } catch {
-    return generateAnswer(input.query)
+  } catch (error) {
+    console.error("Chat backend unavailable:", error)
+    throw error instanceof Error ? error : new Error("Chat backend unavailable")
   }
 }
 
