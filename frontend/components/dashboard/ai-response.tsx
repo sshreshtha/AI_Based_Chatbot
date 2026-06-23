@@ -18,6 +18,7 @@ import { Card, CardContent } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Separator } from "@/components/ui/separator"
 import { Skeleton } from "@/components/ui/skeleton"
+import { createSupportTicket } from "@/lib/chat-api"
 import type { AnswerResult } from "@/lib/mock-answer"
 
 function ConfidenceMeter({ score }: { score: number }) {
@@ -179,9 +180,39 @@ function AnswerCard({
 
 function TicketCard({
   result,
+  sessionId,
 }: {
   result: Extract<AnswerResult, { kind: "ticket" }>
+  sessionId: string
 }) {
+  const [email, setEmail] = useState("")
+  const [ticketId, setTicketId] = useState(result.ticketId ?? null)
+  const [status, setStatus] = useState(result.status)
+  const [submitting, setSubmitting] = useState(false)
+  const [declined, setDeclined] = useState(false)
+  const [error, setError] = useState("")
+
+  const canSubmit = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)
+
+  const raiseTicket = async () => {
+    if (!canSubmit || submitting) return
+    setSubmitting(true)
+    setError("")
+    try {
+      const ticket = await createSupportTicket({
+        question: result.question,
+        email,
+        sessionId,
+      })
+      setTicketId(ticket.ticket_id)
+      setStatus(ticket.status)
+    } catch {
+      setError("Ticket creation failed. Please try again.")
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
   return (
     <Card className="border-amber-300 bg-amber-50">
       <CardContent className="flex flex-col gap-4 p-5">
@@ -191,10 +222,12 @@ function TicketCard({
           </div>
           <div className="flex flex-col gap-1">
             <h3 className="text-sm font-semibold text-foreground">
-              Support Ticket Created
+              {ticketId ? "Support Ticket Created" : "Support Ticket Suggested"}
             </h3>
             <p className="text-sm leading-relaxed text-muted-foreground">
-              The question has been forwarded for expert review.
+              {ticketId
+                ? "The question has been forwarded for expert review."
+                : "Would you like to raise a support ticket for admin review?"}
             </p>
           </div>
         </div>
@@ -203,13 +236,40 @@ function TicketCard({
 
         <Separator className="bg-amber-200" />
 
-        <dl className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+        {!ticketId && !declined && (
+          <div className="flex flex-col gap-3">
+            <input
+              value={email}
+              onChange={(event) => setEmail(event.target.value)}
+              type="email"
+              placeholder="Enter your email"
+              className="h-10 rounded-md border border-amber-200 bg-white px-3 text-sm outline-none focus:ring-2 focus:ring-amber-300"
+            />
+            {error && <p className="text-sm text-destructive">{error}</p>}
+            <div className="flex flex-wrap gap-2">
+              <Button size="sm" onClick={raiseTicket} disabled={!canSubmit || submitting}>
+                {submitting ? "Creating..." : "Yes, raise ticket"}
+              </Button>
+              <Button size="sm" variant="outline" onClick={() => setDeclined(true)}>
+                No
+              </Button>
+            </div>
+          </div>
+        )}
+
+        {declined && !ticketId && (
+          <p className="text-sm text-muted-foreground">
+            No ticket was created.
+          </p>
+        )}
+
+        {ticketId && <dl className="grid grid-cols-1 gap-3 sm:grid-cols-3">
           <div className="flex flex-col gap-0.5">
             <dt className="text-xs font-medium text-muted-foreground">
               Ticket ID
             </dt>
             <dd className="font-mono text-sm font-semibold text-foreground">
-              {result.ticketId}
+              {ticketId}
             </dd>
           </div>
           <div className="flex flex-col gap-0.5">
@@ -217,7 +277,7 @@ function TicketCard({
               Status
             </dt>
             <dd>
-              <Badge variant="secondary">{result.status}</Badge>
+              <Badge variant="secondary">{status}</Badge>
             </dd>
           </div>
           <div className="flex flex-col gap-0.5">
@@ -228,13 +288,13 @@ function TicketCard({
               {result.estimatedReview}
             </dd>
           </div>
-        </dl>
+        </dl>}
       </CardContent>
     </Card>
   )
 }
 
-export function AiResponse({ result }: { result: AnswerResult }) {
+export function AiResponse({ result, sessionId }: { result: AnswerResult; sessionId: string }) {
   return (
     <motion.div
       initial={{ opacity: 0, y: 12 }}
@@ -246,7 +306,7 @@ export function AiResponse({ result }: { result: AnswerResult }) {
       {result.kind === "answer" ? (
         <AnswerCard result={result} />
       ) : (
-        <TicketCard result={result} />
+        <TicketCard result={result} sessionId={sessionId} />
       )}
     </motion.div>
   )

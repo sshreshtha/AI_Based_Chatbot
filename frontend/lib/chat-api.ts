@@ -21,10 +21,17 @@ type BackendChatResponse = {
   mapped_topic?: string | null
   confidence: BackendConfidence
   ticket_required: boolean
+  ticket_suggested?: boolean
   ticket_id?: string | null
   cached: boolean
   sources: BackendSource[]
   session_id?: string | null
+}
+
+type BackendTicketResponse = {
+  ticket_id: string
+  status: string
+  created_at: string
 }
 
 function mapSources(sources: BackendSource[]): SourceDoc[] {
@@ -60,13 +67,13 @@ export async function queryChatbot(input: {
     const data = (await response.json()) as BackendChatResponse
     const confidence = Math.round((data.confidence?.score ?? 0) * 100)
 
-    if (data.ticket_required) {
+    if (data.ticket_suggested || data.ticket_required) {
       return {
         kind: "ticket",
         question: input.query,
         confidence,
-        ticketId: data.ticket_id ?? `TKT-${Date.now()}`,
-        status: "Forwarded for Expert Review",
+        ticketId: data.ticket_id ?? null,
+        status: "Ticket suggested",
         estimatedReview: "Within 1 business day",
       }
     }
@@ -81,4 +88,28 @@ export async function queryChatbot(input: {
   } catch {
     return generateAnswer(input.query)
   }
+}
+
+export async function createSupportTicket(input: {
+  question: string
+  email: string
+  sessionId: string
+}): Promise<BackendTicketResponse> {
+  const response = await fetch(`${DEFAULT_BASE_URL}/api/chat/ticket`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      question: input.question,
+      email: input.email,
+      session_id: input.sessionId,
+    }),
+  })
+
+  if (!response.ok) {
+    throw new Error(`Ticket request failed with ${response.status}`)
+  }
+
+  return response.json() as Promise<BackendTicketResponse>
 }

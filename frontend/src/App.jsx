@@ -1,74 +1,73 @@
 import { useEffect, useState } from "react";
 
+const API_BASE_URL = "http://127.0.0.1:8000";
+
 function App() {
-  const [queries, setQueries] = useState([]);
+  const [tickets, setTickets] = useState([]);
   const [answers, setAnswers] = useState({});
 
-  // Fetch queries
-  const fetchQueries = () => {
-    fetch("http://127.0.0.1:8000/queries")
+  const fetchTickets = () => {
+    fetch(`${API_BASE_URL}/api/chat/tickets?limit=50`)
       .then((res) => res.json())
-      .then((data) => setQueries(data))
+      .then((data) => setTickets(data))
       .catch((err) => console.error(err));
   };
 
   useEffect(() => {
-    fetchQueries();
+    fetchTickets();
   }, []);
 
-  // Handle input change
   const handleChange = (id, value) => {
     setAnswers({ ...answers, [id]: value });
   };
 
-  // Submit answer
   const submitAnswer = (id) => {
-    fetch("http://127.0.0.1:8000/answer", {
+    const answer = answers[id]?.trim();
+    if (!answer) return;
+
+    fetch(`${API_BASE_URL}/api/chat/tickets/${id}/resolve`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        id: id,
-        answer: answers[id],
+        answer,
+        resolved_by: "admin",
       }),
     })
       .then((res) => res.json())
-      .then(() => {
-        fetchQueries(); // refresh data
-      });
+      .then(fetchTickets);
   };
 
   return (
     <div style={{ padding: "20px", color: "white" }}>
-      <h1>Admin Panel - Queries</h1>
+      <h1>Admin Panel - Tickets</h1>
 
-      {queries.length === 0 ? (
-        <p>No queries found</p>
+      {tickets.length === 0 ? (
+        <p>No tickets found</p>
       ) : (
-        queries.map((q) => (
+        tickets.map((ticket) => (
           <div
-            key={q.id}
+            key={ticket.ticket_id}
             style={{
               border: "1px solid white",
               padding: "10px",
               marginBottom: "10px",
             }}
           >
-            <p><b>Question:</b> {q.question}</p>
-            <p><b>Email:</b> {q.email}</p>
-            <p><b>Status:</b> {q.status}</p>
-            <p><b>Answer:</b> {q.answer || "Not answered yet"}</p>
+            <p><b>Question:</b> {ticket.question}</p>
+            <p><b>Email:</b> {ticket.email}</p>
+            <p><b>Status:</b> {ticket.status}</p>
 
-            {q.status === "pending" && (
+            {ticket.status !== "resolved" && (
               <>
                 <input
                   type="text"
                   placeholder="Type answer..."
-                  onChange={(e) => handleChange(q.id, e.target.value)}
+                  onChange={(e) => handleChange(ticket.ticket_id, e.target.value)}
                   style={{ marginRight: "10px", padding: "5px" }}
                 />
-                <button onClick={() => submitAnswer(q.id)}>
+                <button onClick={() => submitAnswer(ticket.ticket_id)}>
                   Submit Answer
                 </button>
               </>

@@ -44,6 +44,13 @@ class Settings(BaseSettings):
     cache_similarity_floor: float = Field(default=0.92, ge=0, le=1)
     alias_learning_min_frequency: int = Field(default=3, ge=1)
 
+    smtp_host: str = Field(default="", validation_alias="SMTP_HOST")
+    smtp_port: int = Field(default=587, validation_alias="SMTP_PORT")
+    smtp_username: str = Field(default="", validation_alias="SMTP_USERNAME")
+    smtp_password: str = Field(default="", validation_alias="SMTP_PASSWORD")
+    smtp_from_email: str = Field(default="", validation_alias="SMTP_FROM_EMAIL")
+    smtp_use_tls: bool = Field(default=True, validation_alias="SMTP_USE_TLS")
+
     model_config = SettingsConfigDict(
         env_file=(
             Path(".env"),

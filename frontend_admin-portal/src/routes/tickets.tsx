@@ -15,7 +15,7 @@ import {
   Sparkles,
 } from "lucide-react";
 import { KpiCard, PageHeader, SectionCard, StatusBadge } from "@/components/admin-ui";
-import { fetchTickets, type TicketRecord } from "@/lib/backend-api";
+import { fetchTickets, resolveTicket, type TicketRecord } from "@/lib/backend-api";
 import {
   Select,
   SelectContent,
@@ -78,6 +78,14 @@ function TicketsPage() {
 
   const [selectedId, setSelectedId] = useState<string>(tickets[0].id);
   const [draft, setDraft] = useState(tickets[0].aiResponse);
+  const [resolving, setResolving] = useState(false);
+
+  const loadTickets = () => {
+    return fetchTickets(50).then((records) => {
+      setLiveTickets(records.map(mapTicketRecord));
+      setLoadError(null);
+    });
+  };
 
   const filtered = useMemo(() => {
     return tickets.filter((t) => {
@@ -107,6 +115,22 @@ function TicketsPage() {
     setSelectedId(id);
     const t = tickets.find((x) => x.id === id);
     setDraft(t?.aiResponse ?? "");
+  };
+
+  const onResolve = async () => {
+    if (!selected || !draft.trim() || resolving) return;
+    setResolving(true);
+    try {
+      const result = await resolveTicket(selected.id, draft.trim());
+      await loadTickets();
+      toast.success("Ticket resolved", {
+        description: result.email_sent ? "User emailed and answer added to retrieval." : "Answer added to retrieval. Email skipped.",
+      });
+    } catch {
+      toast.error("Resolve failed", { description: selected.id });
+    } finally {
+      setResolving(false);
+    }
   };
 
   return (
@@ -231,10 +255,11 @@ function TicketsPage() {
                 <Save className="h-3.5 w-3.5" /> Save Draft
               </button>
               <button
-                onClick={() => toast.success("Ticket resolved", { description: selected.id })}
+                onClick={onResolve}
+                disabled={!draft.trim() || resolving}
                 className="inline-flex items-center gap-1.5 h-9 px-3 text-sm bg-primary text-primary-foreground rounded-md hover:bg-primary/90"
               >
-                <Send className="h-3.5 w-3.5" /> Resolve
+                <Send className="h-3.5 w-3.5" /> {resolving ? "Resolving" : "Resolve"}
               </button>
               <button
                 onClick={() => toast("Ticket escalated to SME", { description: selected.id })}

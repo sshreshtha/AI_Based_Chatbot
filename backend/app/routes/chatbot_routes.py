@@ -1,13 +1,14 @@
 import logging
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile, status
 from pymongo.errors import PyMongoError
 
 from app.config.settings import Settings, get_settings
 from app.database.mongo_client import get_database
-from app.models.request_models import ChatQueryRequest, TicketCreateRequest
+from app.models.request_models import AdminResolveTicketRequest, ChatQueryRequest, TicketCreateRequest
 from app.models.response_models import (
+    AdminResolveTicketResponse,
     AdminOverviewResponse,
     AnalyticsItem,
     ChatQueryResponse,
@@ -15,13 +16,17 @@ from app.models.response_models import (
     HistoryItem,
     TicketItem,
     TicketResponse,
+    UploadResponse,
 )
+from app.services.admin_resolution_service import AdminResolutionService
 from app.services.alias_learning_service import AliasLearningService
 from app.services.analytics_service import AnalyticsService
 from app.services.cache_service import CacheService
 from app.services.confidence_service import ConfidenceService
+from app.services.email_service import EmailService
 from app.services.embedding_service import EmbeddingService
 from app.services.gemini_service import GeminiService
+from app.services.knowledge_ingestion_service import KnowledgeIngestionService
 from app.services.nlp_service import NLPPreprocessingService
 from app.services.retrieval_service import RetrievalService
 from app.services.ticket_service import TicketService
@@ -52,6 +57,9 @@ def get_services(settings: Settings = Depends(get_settings)) -> dict:
         "analytics": AnalyticsService(db),
         "alias_learning": AliasLearningService(db, settings),
         "tickets": TicketService(db),
+        "admin_resolutions": AdminResolutionService(db, embedding),
+        "email": EmailService(settings),
+        "ingestion": KnowledgeIngestionService(db, embedding),
     }
 
 
@@ -60,16 +68,18 @@ def query_chatbot(payload: ChatQueryRequest, services: Annotated[dict, Depends(g
     try:
         processed, sources, context, mapped_topic, score = services["retrieval"].retrieve(payload.query)
         confidence = services["confidence"].evaluate(score)
-        cached_answer = services["cache"].get_cached_answer(mapped_topic)
-        ticket_id = None
+        ticket_suggested = confidence.ticket_required
+        cached_answer = None if ticket_suggested else services["cache"].get_cached_answer(mapped_topic)
         cached = cached_answer is not None
-        answer = cached_answer or services["gemini"].generate_answer(payload.query, context)
+        answer = (
+            "I could not find a sufficiently reliable answer in the knowledge base. "
+            "Would you like to raise a support ticket for admin review?"
+            if ticket_suggested
+            else cached_answer or services["gemini"].generate_answer(payload.query, context)
+        )
 
-        if not cached:
+        if not cached and not ticket_suggested:
             services["cache"].store_answer(mapped_topic, payload.query, answer)
-        if confidence.ticket_required:
-            ticket = services["tickets"].create_ticket(payload.query, str(payload.email) if payload.email else None, payload.session_id)
-            ticket_id = services["tickets"].stringify_id(ticket)
 
         services["analytics"].record(payload.query, mapped_topic, score, answer, payload.session_id)
         services["alias_learning"].observe(processed.normalized, mapped_topic)
@@ -78,8 +88,9 @@ def query_chatbot(payload: ChatQueryRequest, services: Annotated[dict, Depends(g
             answer=answer,
             mapped_topic=mapped_topic,
             confidence=confidence,
-            ticket_required=confidence.ticket_required,
-            ticket_id=ticket_id,
+            ticket_required=ticket_suggested,
+            ticket_suggested=ticket_suggested,
+            ticket_id=None,
             cached=cached,
             sources=sources,
             session_id=payload.session_id,
@@ -104,6 +115,96 @@ def create_ticket(payload: TicketCreateRequest, services: Annotated[dict, Depend
     except PyMongoError as exc:
         logger.exception("Database error while creating ticket")
         raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="Database unavailable") from exc
+
+
+@router.get("/tickets", response_model=list[TicketItem], summary="List admin ticket queue")
+def list_tickets(
+    services: Annotated[dict, Depends(get_services)],
+    limit: int = Query(default=50, ge=1, le=200),
+    ticket_status: str | None = Query(default=None, alias="status"),
+) -> list[TicketItem]:
+    return [
+        TicketItem(
+            ticket_id=services["tickets"].stringify_id(item),
+            question=item["question"],
+            email=item.get("email"),
+            status=item.get("status", "open"),
+            created_at=item["created_at"],
+            resolved_at=item.get("resolved_at"),
+            session_id=item.get("session_id"),
+        )
+        for item in services["tickets"].list_tickets(limit, ticket_status)
+    ]
+
+
+@router.post(
+    "/tickets/{ticket_id}/resolve",
+    response_model=AdminResolveTicketResponse,
+    summary="Resolve a ticket, notify user, and store the answer for retrieval",
+)
+def resolve_ticket(
+    ticket_id: str,
+    payload: AdminResolveTicketRequest,
+    services: Annotated[dict, Depends(get_services)],
+) -> AdminResolveTicketResponse:
+    ticket = services["tickets"].get_ticket(ticket_id)
+    if not ticket:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Ticket not found")
+
+    canonical_ticket_id = services["tickets"].stringify_id(ticket)
+    resolution = services["admin_resolutions"].store_resolution(
+        canonical_ticket_id,
+        ticket["question"],
+        payload.answer,
+        payload.topic,
+        payload.resolved_by,
+    )
+    email_sent = services["email"].send_resolution(
+        ticket.get("email"),
+        ticket["question"],
+        payload.answer,
+        canonical_ticket_id,
+    )
+    updated = services["tickets"].mark_resolved(canonical_ticket_id)
+    if not updated:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Ticket not found")
+
+    return AdminResolveTicketResponse(
+        ticket_id=canonical_ticket_id,
+        status=updated["status"],
+        email_sent=email_sent,
+        stored_in_admin_resolutions=bool(resolution),
+        resolved_at=updated["resolved_at"],
+    )
+
+
+@router.post("/upload", response_model=UploadResponse, summary="Upload PDF into MongoDB knowledge_chunks")
+async def upload_pdf(
+    services: Annotated[dict, Depends(get_services)],
+    file: UploadFile = File(...),
+    topic: str | None = None,
+) -> UploadResponse:
+    if file.content_type not in {"application/pdf", "application/octet-stream"}:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Only PDF uploads are supported")
+    pdf_bytes = await file.read()
+    try:
+        import fitz
+
+        doc = fitz.open(stream=pdf_bytes, filetype="pdf")
+        text = ""
+        for page in doc:
+            text += page.get_text()
+    except ImportError as exc:
+        raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="PyMuPDF is not installed") from exc
+    except Exception as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="PDF could not be processed") from exc
+
+    chunks_stored = services["ingestion"].store_pdf_text(text, file.filename or "uploaded.pdf", topic)
+    return UploadResponse(
+        message="PDF uploaded and stored in MongoDB",
+        source_document=file.filename or "uploaded.pdf",
+        chunks_stored=chunks_stored,
+    )
 
 
 @router.get("/history", response_model=list[HistoryItem], summary="Get session query history")
@@ -179,6 +280,7 @@ def admin_overview(services: Annotated[dict, Depends(get_services)]) -> AdminOve
             email=item.get("email"),
             status=item.get("status", "open"),
             created_at=item["created_at"],
+            resolved_at=item.get("resolved_at"),
             session_id=item.get("session_id"),
         )
         for item in services["tickets"].list_tickets(5)

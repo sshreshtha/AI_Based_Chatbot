@@ -177,7 +177,7 @@ export default function DashboardPage() {
       {/* AI response / loading area */}
       {(loading || result) && (
         <section ref={responseRef} className="mx-auto w-full max-w-2xl scroll-mt-20">
-          {loading ? <TypingIndicator /> : result && <AiResponse result={result} />}
+          {loading ? <TypingIndicator /> : result && <AiResponse result={result} sessionId={sessionId} />}
         </section>
       )}
 

@@ -7,8 +7,7 @@ collections = [
     "admins",
     "response_cache",
     "query_analytics",
-    "topic_aliases",
-    "system_logs"
+    "topic_aliases"
 ]
 
 for collection in collections:

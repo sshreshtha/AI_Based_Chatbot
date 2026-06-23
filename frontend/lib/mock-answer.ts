@@ -16,7 +16,7 @@ export type AnswerResult =
       kind: "ticket"
       question: string
       confidence: number
-      ticketId: string
+      ticketId?: string | null
       status: string
       estimatedReview: string
     }
@@ -122,8 +122,8 @@ export function generateAnswer(question: string): AnswerResult {
     kind: "ticket",
     question,
     confidence: 38,
-    ticketId: `TKT-${Math.floor(100000 + Math.random() * 899999)}`,
-    status: "Forwarded for Expert Review",
+    ticketId: null,
+    status: "Ticket suggested",
     estimatedReview: "Within 1 business day",
   }
 }

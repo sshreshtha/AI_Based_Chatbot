@@ -6,3 +6,5 @@ email-validator
 sentence-transformers
 rapidfuzz
 google-genai
+PyMuPDF
+python-multipart

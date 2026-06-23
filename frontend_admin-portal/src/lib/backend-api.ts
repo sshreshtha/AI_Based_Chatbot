@@ -35,7 +35,16 @@ export type TicketRecord = {
   email: string | null;
   status: string;
   created_at: string;
+  resolved_at?: string | null;
   session_id: string | null;
+};
+
+export type ResolveTicketResponse = {
+  ticket_id: string;
+  status: string;
+  email_sent: boolean;
+  stored_in_admin_resolutions: boolean;
+  resolved_at: string;
 };
 
 async function readJson<T>(path: string): Promise<T> {
@@ -52,4 +61,21 @@ export async function fetchAdminOverview() {
 
 export async function fetchTickets(limit = 20) {
   return readJson<TicketRecord[]>(`/api/chat/tickets?limit=${limit}`);
+}
+
+export async function resolveTicket(ticketId: string, answer: string, resolvedBy = "admin") {
+  const response = await fetch(`${DEFAULT_BASE_URL}/api/chat/tickets/${ticketId}/resolve`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      answer,
+      resolved_by: resolvedBy,
+    }),
+  });
+  if (!response.ok) {
+    throw new Error(`Resolve failed: ${response.status}`);
+  }
+  return response.json() as Promise<ResolveTicketResponse>;
 }

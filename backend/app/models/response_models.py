@@ -23,6 +23,7 @@ class ChatQueryResponse(BaseModel):
     mapped_topic: Optional[str]
     confidence: ConfidenceResult
     ticket_required: bool
+    ticket_suggested: bool = False
     ticket_id: Optional[str] = None
     cached: bool = False
     sources: List[SourceDocument] = Field(default_factory=list)
@@ -64,7 +65,23 @@ class TicketItem(BaseModel):
     email: Optional[str] = None
     status: str
     created_at: datetime
+    resolved_at: Optional[datetime] = None
     session_id: Optional[str] = None
+
+
+class AdminResolveTicketResponse(BaseModel):
+    ticket_id: str
+    status: str
+    email_sent: bool
+    stored_in_admin_resolutions: bool
+    resolved_at: datetime
+
+
+class UploadResponse(BaseModel):
+    message: str
+    source_document: str
+    chunks_stored: int
+    collection: str = "knowledge_chunks"
 
 
 class AdminOverviewResponse(BaseModel):
