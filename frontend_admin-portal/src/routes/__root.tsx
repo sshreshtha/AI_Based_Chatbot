@@ -15,6 +15,7 @@ import { reportLovableError } from "../lib/lovable-error-reporting";
 import { AppSidebar } from "@/components/app-sidebar";
 import { TopNavbar } from "@/components/top-navbar";
 import { Toaster } from "@/components/ui/sonner";
+import { ThemeProvider } from "@/hooks/use-theme";
 
 function NotFoundComponent() {
   return (
@@ -126,6 +127,14 @@ function RootShell({ children }: { children: ReactNode }) {
 }
 
 function RootComponent() {
+  return (
+    <ThemeProvider>
+      <RootComponentInner />
+    </ThemeProvider>
+  );
+}
+
+function RootComponentInner() {
   const { queryClient } = Route.useRouteContext();
   const [collapsed, setCollapsed] = useState(false);
 

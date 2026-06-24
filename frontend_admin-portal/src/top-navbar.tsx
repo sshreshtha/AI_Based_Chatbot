@@ -1,5 +1,6 @@
-import { Bell, Search, Menu, ChevronRight, User, Settings, Sparkles } from "lucide-react";
+import { Bell, Search, Menu, ChevronRight, User, Settings } from "lucide-react";
 import { useRouterState, Link } from "@tanstack/react-router";
+import { NtpcLogo } from "@/components/ntpc-logo";
 import { useEffect, useState } from "react";
 import { Sheet, SheetContent, SheetTrigger, SheetTitle, SheetHeader } from "@/components/ui/sheet";
 import {
@@ -22,7 +23,7 @@ const titleMap: Record<string, string> = {
   "/": "Dashboard",
   "/tickets": "Ticket Management",
   "/knowledge": "Knowledge Base",
-  "/analytics": "Analytics",
+  "/profile": "Admin Profile",
   "/settings": "System Settings",
 };
 
@@ -88,8 +89,8 @@ export function TopNavbar({ adminName }: { adminName: string }) {
       </Sheet>
 
       <Link to="/" className="flex items-center gap-2.5">
-        <div className="animate-logo-breathe flex h-8 w-8 items-center justify-center rounded-md bg-primary/10 text-primary font-bold text-sm">
-          <Sparkles className="h-4 w-4" />
+        <div className="animate-logo-breathe flex h-9 w-9 items-center justify-center text-primary">
+          <NtpcLogo className="h-8 w-8" />
         </div>
         <div className="hidden sm:flex flex-col leading-tight">
           <span className="text-sm font-semibold text-foreground">NTPC Control Center</span>
@@ -167,7 +168,9 @@ export function TopNavbar({ adminName }: { adminName: string }) {
           <DropdownMenuContent align="end" className="w-56">
             <DropdownMenuLabel>My Account</DropdownMenuLabel>
             <DropdownMenuSeparator />
-            <DropdownMenuItem><User className="h-4 w-4 mr-2" />Profile</DropdownMenuItem>
+            <DropdownMenuItem asChild>
+              <Link to="/profile"><User className="h-4 w-4 mr-2" />Profile</Link>
+            </DropdownMenuItem>
             <DropdownMenuItem asChild>
               <Link to="/settings"><Settings className="h-4 w-4 mr-2" />Settings</Link>
             </DropdownMenuItem>

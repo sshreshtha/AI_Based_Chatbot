@@ -74,11 +74,28 @@ def query_chatbot(payload: ChatQueryRequest, services: Annotated[dict, Depends(g
         ticket_suggested = confidence.ticket_required
         cached_answer = None if ticket_suggested else services["cache"].get_cached_answer(mapped_topic)
         cached = cached_answer is not None
+        db_answer = ""
+        if sources:
+            top_source = sources[0]
+            if top_source.collection == "admin_resolutions":
+                try:
+                    from bson import ObjectId
+                    doc_id = top_source.id
+                    query_filter = {"_id": ObjectId(doc_id)} if len(doc_id) == 24 else {"_id": doc_id}
+                    doc = services["db"].admin_resolutions.find_one(query_filter)
+                    if doc and doc.get("answer"):
+                        db_answer = doc.get("answer")
+                except Exception:
+                    logger.warning("Failed to retrieve clean answer from admin_resolutions, using preview")
+            
+            if not db_answer:
+                db_answer = top_source.preview
+
         answer = (
             "I could not find a sufficiently reliable answer in the knowledge base. "
             "Would you like to raise a support ticket for admin review?"
             if ticket_suggested
-            else cached_answer or services["gemini"].generate_answer(payload.query, context)
+            else cached_answer or db_answer or "I do not have enough information in the knowledge base to answer this question."
         )
 
         if ticket_suggested:

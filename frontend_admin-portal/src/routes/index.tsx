@@ -130,92 +130,6 @@ function DashboardPage() {
         <KpiCard icon={BookOpen} label="Knowledge Articles" value={totalKnowledgeDocs.toString()} trend={{ value: 0 }} description="knowledge + learned answers" delay={0.15} />
       </div>
 
-      <SectionCard
-        title="Live Mongo Snapshot"
-        description={overviewError ?? "Collection counts and recent records read from MongoDB Atlas."}
-        className="mt-4 sm:mt-6"
-      >
-        <div className="grid grid-cols-2 lg:grid-cols-6 gap-3">
-          <LiveStat label="Knowledge docs" value={totalKnowledgeDocs} />
-          <LiveStat label="Query analytics" value={queryRecords} />
-          <LiveStat label="Response cache" value={activeResponses} />
-          <LiveStat label="Topic aliases" value={topicAliases} />
-          <LiveStat label="Tickets" value={ticketRecords} />
-          <LiveStat label="DB status" value={overview?.health.database ?? "—"} />
-        </div>
-        <div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-3 text-sm">
-          <div className="rounded-md border border-border bg-muted/30 p-3">
-            <p className="text-xs uppercase tracking-wider text-muted-foreground">Recent query</p>
-            <p className="mt-1 text-foreground">{overview?.recent_queries[0]?.query ?? "No live query data yet."}</p>
-          </div>
-          <div className="rounded-md border border-border bg-muted/30 p-3">
-            <p className="text-xs uppercase tracking-wider text-muted-foreground">Recent ticket</p>
-            <p className="mt-1 text-foreground">{overview?.recent_tickets[0]?.question ?? "No live ticket data yet."}</p>
-          </div>
-        </div>
-      </SectionCard>
-
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 mt-4 sm:mt-6">
-        <SectionCard title="Daily Query Trends" description="User questions submitted to AI" className="lg:col-span-2">
-          <div className="h-64">
-            <ResponsiveContainer width="100%" height="100%">
-              <LineChart data={queryTrend}>
-                <CartesianGrid strokeDasharray="3 3" stroke={chartTheme.grid} />
-                <XAxis dataKey="day" stroke={chartTheme.axis} fontSize={12} />
-                <YAxis stroke={chartTheme.axis} fontSize={12} />
-                <Tooltip contentStyle={{ fontSize: 12, borderRadius: 6, border: "1px solid var(--color-border)" }} />
-                <Line type="monotone" dataKey="value" stroke={chartTheme.primary} strokeWidth={2} dot={false} />
-              </LineChart>
-            </ResponsiveContainer>
-          </div>
-        </SectionCard>
-
-        <SectionCard title="System Health">
-          <ul className="space-y-3 text-sm">
-            <HealthRow icon={Database} label="Database" status={overview?.health.database === "ok" ? "Healthy" : "Unavailable"} warn={overview?.health.database !== "ok"} />
-            <HealthRow icon={Cpu} label="Knowledge Processing" status={overview?.health.services.nlp ?? "Healthy"} />
-            <HealthRow icon={ListChecks} label="Ticket Queue" status={`Backlog: ${ticketRecords}`} warn={ticketRecords > 0} />
-          </ul>
-        </SectionCard>
-      </div>
-
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mt-4 sm:mt-6">
-        <SectionCard title="Ticket Resolution Trends">
-          <div className="h-60">
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={ticketTrend}>
-                <CartesianGrid strokeDasharray="3 3" stroke={chartTheme.grid} />
-                <XAxis dataKey="day" stroke={chartTheme.axis} fontSize={12} />
-                <YAxis stroke={chartTheme.axis} fontSize={12} />
-                <Tooltip contentStyle={{ fontSize: 12, borderRadius: 6, border: "1px solid var(--color-border)" }} />
-                <Bar dataKey="opened" fill="var(--color-accent-foreground)" radius={[4, 4, 0, 0]} opacity={0.4} />
-                <Bar dataKey="resolved" fill={chartTheme.primary} radius={[4, 4, 0, 0]} />
-              </BarChart>
-            </ResponsiveContainer>
-          </div>
-        </SectionCard>
-
-        <SectionCard title="Knowledge Growth">
-          <div className="h-60">
-            <ResponsiveContainer width="100%" height="100%">
-              <AreaChart data={kbGrowth}>
-                <defs>
-                  <linearGradient id="kbGrad" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="0%" stopColor="var(--color-primary)" stopOpacity={0.35} />
-                    <stop offset="100%" stopColor="var(--color-primary)" stopOpacity={0} />
-                  </linearGradient>
-                </defs>
-                <CartesianGrid strokeDasharray="3 3" stroke={chartTheme.grid} />
-                <XAxis dataKey="month" stroke={chartTheme.axis} fontSize={12} />
-                <YAxis stroke={chartTheme.axis} fontSize={12} />
-                <Tooltip contentStyle={{ fontSize: 12, borderRadius: 6, border: "1px solid var(--color-border)" }} />
-                <Area type="monotone" dataKey="docs" stroke={chartTheme.primary} strokeWidth={2} fill="url(#kbGrad)" />
-              </AreaChart>
-            </ResponsiveContainer>
-          </div>
-        </SectionCard>
-      </div>
-
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 mt-4 sm:mt-6">
         <SectionCard title="Recent Activity" className="lg:col-span-2">
           <div className="overflow-x-auto -mx-4 sm:mx-0">
@@ -245,21 +159,31 @@ function DashboardPage() {
           </div>
         </SectionCard>
 
-        <SectionCard title="Knowledge Gap Insights" description="AI-driven recommendations">
-          <ul className="space-y-3">
-            {gaps.map((g, i) => (
-              <li key={i} className="flex items-start gap-3 p-2.5 rounded-md border border-border">
-                <div className="h-7 w-7 shrink-0 rounded-md bg-primary/10 text-primary flex items-center justify-center">
-                  {g.type === "Unanswered" ? <AlertTriangle className="h-3.5 w-3.5" /> : g.type === "Emerging" ? <TrendingUp className="h-3.5 w-3.5" /> : <Sparkles className="h-3.5 w-3.5" />}
-                </div>
-                <div className="min-w-0 flex-1">
-                  <p className="text-sm text-foreground truncate">{g.topic}</p>
-                  <p className="text-xs text-muted-foreground mt-0.5">{g.type} • {g.count} mentions</p>
-                </div>
-              </li>
-            ))}
-          </ul>
-        </SectionCard>
+        <div className="flex flex-col gap-4">
+          <SectionCard title="System Health">
+            <ul className="space-y-3 text-sm">
+              <HealthRow icon={Database} label="Database" status={overview?.health.database === "ok" ? "Healthy" : "Unavailable"} warn={overview?.health.database !== "ok"} />
+              <HealthRow icon={Cpu} label="Knowledge Processing" status={overview?.health.services.nlp ?? "Healthy"} />
+              <HealthRow icon={ListChecks} label="Ticket Queue" status={`Backlog: ${ticketRecords}`} warn={ticketRecords > 0} />
+            </ul>
+          </SectionCard>
+
+          <SectionCard title="Knowledge Gap Insights" description="AI-driven recommendations">
+            <ul className="space-y-3">
+              {gaps.map((g, i) => (
+                <li key={i} className="flex items-start gap-3 p-2.5 rounded-md border border-border">
+                  <div className="h-7 w-7 shrink-0 rounded-md bg-primary/10 text-primary flex items-center justify-center">
+                    {g.type === "Unanswered" ? <AlertTriangle className="h-3.5 w-3.5" /> : g.type === "Emerging" ? <TrendingUp className="h-3.5 w-3.5" /> : <Sparkles className="h-3.5 w-3.5" />}
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <p className="text-sm text-foreground truncate">{g.topic}</p>
+                    <p className="text-xs text-muted-foreground mt-0.5">{g.type} • {g.count} mentions</p>
+                  </div>
+                </li>
+              ))}
+            </ul>
+          </SectionCard>
+        </div>
       </div>
     </div>
   );
