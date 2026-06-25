@@ -205,7 +205,7 @@ function ResponseFeedback({
 
   return (
     <div className="flex flex-col gap-3">
-      <p className="text-sm font-medium text-foreground">Was this answer helpful?</p>
+      <p className="text-sm font-medium text-foreground">Was this helpful?</p>
       <div className="flex flex-wrap gap-2">
         <Button
           size="sm"

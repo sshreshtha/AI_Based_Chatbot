@@ -48,10 +48,16 @@ class Settings(BaseSettings):
     hybrid_vector_weight: float = Field(default=0.7, ge=0, le=1, validation_alias="HYBRID_VECTOR_WEIGHT")
     hybrid_keyword_weight: float = Field(default=0.3, ge=0, le=1, validation_alias="HYBRID_KEYWORD_WEIGHT")
     weak_retrieval_threshold: float = Field(default=0.35, ge=0, le=1, validation_alias="WEAK_RETRIEVAL_THRESHOLD")
+    min_answerability_keyword_score: float = Field(
+        default=0.40, ge=0, le=1, validation_alias="MIN_ANSWERABILITY_KEYWORD_SCORE"
+    )
+    min_high_confidence_keyword_score: float = Field(
+        default=0.50, ge=0, le=1, validation_alias="MIN_HIGH_CONFIDENCE_KEYWORD_SCORE"
+    )
     retrieval_debug: bool = Field(default=False, validation_alias="RETRIEVAL_DEBUG")
 
-    high_confidence_threshold: float = Field(default=0.80, ge=0, le=1)
-    medium_confidence_threshold: float = Field(default=0.60, ge=0, le=1)
+    high_confidence_threshold: float = Field(default=0.90, ge=0, le=1)
+    medium_confidence_threshold: float = Field(default=0.75, ge=0, le=1)
 
     gemini_api_key: str = Field(default="", validation_alias="GEMINI_API_KEY")
     gemini_model: str = Field(default="gemini-2.5-flash", validation_alias="GEMINI_MODEL")

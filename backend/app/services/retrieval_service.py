@@ -18,6 +18,25 @@ logger = logging.getLogger(__name__)
 INTENT_TOKENS = frozenset(
     {"how", "what", "when", "where", "why", "much", "many", "does", "do", "is", "are", "the"}
 )
+GENERIC_CONCEPT_TOKENS = frozenset(
+    {
+        "action",
+        "rule",
+        "rules",
+        "policy",
+        "service",
+        "office",
+        "pay",
+        "amount",
+        "employee",
+        "company",
+        "corporation",
+        "ntpc",
+        "procedure",
+        "process",
+        "information",
+    }
+)
 
 
 @dataclass
@@ -73,7 +92,7 @@ class RetrievalService:
         answerable_sources = self._filter_answerable_sources(processed, sources)
         quality = self._build_quality(processed, ranked, answerable_sources)
         mapped_topic = self._resolve_topic(processed, answerable_sources or sources)
-        context = [source.preview for source in answerable_sources]
+        context = [source.preview for source in answerable_sources[: self.settings.top_k]]
 
         self._log_retrieval_debug(query, processed, embed_text, ranked, quality)
 
@@ -181,6 +200,9 @@ class RetrievalService:
         substantive_tokens = self._concept_tokens(processed)
         if substantive_tokens and substantive_overlap >= 1.0:
             final_score = min(1.0, final_score + 0.12)
+        source_doc = str(item.get("source_document") or "").lower()
+        if "service rules" in processed.normalized and "service_rules" in source_doc.replace(" ", "_"):
+            final_score = min(1.0, final_score + 0.15)
         return _ScoredCandidate(
             source=source,
             vector_score=vector_score,
@@ -219,9 +241,7 @@ class RetrievalService:
         return keyword_score, substantive_overlap
 
     def _token_in_text(self, token: str, text: str) -> bool:
-        if len(token) <= 4:
-            return bool(re.search(rf"\b{re.escape(token)}\b", text))
-        return token in text
+        return bool(re.search(rf"\b{re.escape(token)}\b", text))
 
     def _concept_tokens(self, processed: PreprocessedQuery) -> List[str]:
         tokens = list(dict.fromkeys([*processed.search_tokens, *processed.tokens]))
@@ -237,19 +257,26 @@ class RetrievalService:
         top_vector = ranked[0].vector_score if ranked else 0.0
         top_keyword = ranked[0].keyword_score if ranked else 0.0
         top_combined = ranked[0].final_score if ranked else 0.0
+        context_keyword_score = 0.0
         if answerable_sources:
             best = max(answerable_sources, key=lambda source: source.score)
             top_vector = best.vector_score or top_vector
             top_keyword = best.keyword_score or top_keyword
             top_combined = best.score
+            context_keyword_score = max(source.keyword_score or 0.0 for source in answerable_sources)
         answerable = bool(answerable_sources)
-        weak_retrieval = (not answerable) or top_combined < self.settings.weak_retrieval_threshold
+        weak_retrieval = (
+            (not answerable)
+            or top_combined < self.settings.weak_retrieval_threshold
+            or context_keyword_score < self.settings.min_answerability_keyword_score
+        )
         return RetrievalQuality(
             vector_score=top_vector,
             keyword_score=top_keyword,
             combined_score=top_combined,
             answerable=answerable,
             weak_retrieval=weak_retrieval,
+            context_keyword_score=context_keyword_score,
         )
 
     def _filter_answerable_sources(
@@ -259,19 +286,49 @@ class RetrievalService:
     ) -> List[SourceDocument]:
         concept_tokens = self._concept_tokens(processed)
         if not concept_tokens:
-            return sources
+            return [
+                source
+                for source in sources
+                if (source.keyword_score or 0.0) >= self.settings.min_answerability_keyword_score
+            ]
 
-        matched = [
-            source
-            for source in sources
-            if any(self._token_in_text(token, source.preview.lower()) for token in concept_tokens)
-            or any(phrase in source.preview.lower() for phrase in processed.phrases)
-        ]
+        strong_concepts = [token for token in concept_tokens if token not in GENERIC_CONCEPT_TOKENS]
+        matched: List[SourceDocument] = []
+        for source in sources:
+            keyword_score = source.keyword_score or 0.0
+            if keyword_score < self.settings.min_answerability_keyword_score:
+                continue
+            text = source.preview.lower()
+            if not self._source_matches_concepts(text, processed, strong_concepts or concept_tokens):
+                continue
+            if source.collection == "admin_resolutions":
+                kb_best = max(
+                    (item.keyword_score or 0.0 for item in sources if item.collection == "knowledge_chunks"),
+                    default=0.0,
+                )
+                if keyword_score < max(0.55, kb_best):
+                    continue
+            matched.append(source)
+        if "service rules" in processed.normalized:
+            preferred = [source for source in matched if source.topic and "service rules" in source.topic.lower()]
+            return preferred or []
         return matched
 
-    def _is_answerable(self, processed: PreprocessedQuery, ranked: List[_ScoredCandidate]) -> bool:
-        sources = [item.source for item in ranked]
-        return bool(self._filter_answerable_sources(processed, sources))
+    def _source_matches_concepts(
+        self,
+        text: str,
+        processed: PreprocessedQuery,
+        concepts: List[str],
+    ) -> bool:
+        if any(phrase in text for phrase in processed.phrases):
+            return True
+        strong = [token for token in concepts if token not in GENERIC_CONCEPT_TOKENS]
+        if len(strong) >= 2:
+            matches = sum(1 for token in strong if self._token_in_text(token, text))
+            return matches >= 2
+        if strong:
+            return any(self._token_in_text(token, text) for token in strong)
+        return any(self._token_in_text(token, text) for token in concepts)
 
     def _to_source_document(self, collection_name: str, item: dict) -> SourceDocument:
         if collection_name == "admin_resolutions":
@@ -312,6 +369,7 @@ class RetrievalService:
             "vector_score": round(quality.vector_score, 6),
             "keyword_score": round(quality.keyword_score, 6),
             "combined_score": round(quality.combined_score, 6),
+            "context_keyword_score": round(quality.context_keyword_score, 6),
             "answerable": quality.answerable,
             "weak_retrieval": quality.weak_retrieval,
             "chunks": [

@@ -11,9 +11,13 @@ class ConfidenceService:
 
     def evaluate(self, quality: RetrievalQuality) -> ConfidenceResult:
         score = quality.combined_confidence
+        relevance = max(quality.keyword_score, quality.context_keyword_score)
         if not quality.answerable or quality.weak_retrieval:
             return ConfidenceResult(label="low", score=score, ticket_required=True)
-        if score >= self.settings.high_confidence_threshold:
+        if (
+            score >= self.settings.high_confidence_threshold
+            and relevance >= self.settings.min_high_confidence_keyword_score
+        ):
             return ConfidenceResult(label="high", score=score, ticket_required=False)
         if score >= self.settings.medium_confidence_threshold:
             return ConfidenceResult(label="medium", score=score, ticket_required=False)

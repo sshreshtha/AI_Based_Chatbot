@@ -14,15 +14,23 @@ class RetrievalQuality:
     combined_score: float
     answerable: bool
     weak_retrieval: bool
+    context_keyword_score: float = 0.0
 
     @property
     def combined_confidence(self) -> float:
-        answerability = 1.0 if self.answerable else 0.0
+        if not self.answerable or self.weak_retrieval:
+            return min(
+                (0.35 * self.combined_score)
+                + (0.25 * self.vector_score)
+                + (0.25 * self.keyword_score),
+                0.59,
+            )
+        relevance = max(self.keyword_score, self.context_keyword_score)
         return (
-            (0.35 * self.combined_score)
-            + (0.25 * self.vector_score)
-            + (0.25 * self.keyword_score)
-            + (0.15 * answerability)
+            (0.30 * self.combined_score)
+            + (0.20 * self.vector_score)
+            + (0.35 * relevance)
+            + (0.15 * 1.0)
         )
 
 
