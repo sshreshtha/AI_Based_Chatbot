@@ -139,11 +139,9 @@ function TicketsPage() {
         subtitle={loadError ?? "Triage and resolve unresolved AI queries."}
       />
 
-      <div className="grid grid-cols-2 xl:grid-cols-4 gap-3 sm:gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
         <KpiCard icon={TicketIcon} label="Pending Tickets" value={pendingTickets.toString()} trend={{ value: 0 }} delay={0} />
         <KpiCard icon={CheckCircle2} label="Loaded Queue" value={tickets.length.toString()} trend={{ value: 0 }} delay={0.05} />
-        <KpiCard icon={Clock} label="Avg. Resolution" value="3h 12m" trend={{ value: 8 }} delay={0.1} />
-        <KpiCard icon={AlertTriangle} label="Escalated" value={escalatedTickets.toString()} trend={{ value: 1.5, positive: false }} delay={0.15} />
       </div>
 
       <div className="grid grid-cols-1 xl:grid-cols-5 gap-4 mt-4 sm:mt-6">

@@ -1,17 +1,17 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import Image from "next/image"
 import Link from "next/link"
 import { usePathname } from "next/navigation"
 import { motion, AnimatePresence } from "motion/react"
 import {
   LayoutDashboard,
-  Library,
   Menu,
   HelpCircle,
   PanelLeftClose,
   PanelLeft,
+  Settings,
 } from "lucide-react"
 
 import { cn } from "@/lib/utils"
@@ -31,7 +31,7 @@ import {
 
 const navItems = [
   { title: "Dashboard", href: "/", icon: LayoutDashboard },
-  { title: "Knowledge Repository", href: "/repository", icon: Library },
+  { title: "Settings", href: "/settings", icon: Settings },
 ]
 
 function Brand({ collapsed }: { collapsed?: boolean }) {
@@ -49,10 +49,10 @@ function Brand({ collapsed }: { collapsed?: boolean }) {
       </div>
       {!collapsed && (
         <div className="flex flex-col leading-tight">
-          <span className="text-sm font-semibold text-foreground">
+          <span className="text-sm font-semibold text-sidebar-foreground">
             NTPC Chatbot
           </span>
-          <span className="text-xs text-muted-foreground">
+          <span className="text-xs text-sidebar-foreground/70">
             Joinee & trainee helpdesk
           </span>
         </div>
@@ -89,14 +89,14 @@ function NavLinks({
               "group flex items-center gap-3 rounded-md px-3 py-2.5 text-sm font-medium transition-all duration-200 ease-out",
               collapsed && "justify-center px-0",
               active
-                ? "bg-accent text-accent-foreground shadow-sm ring-1 ring-primary/15"
-                : "text-muted-foreground hover:bg-secondary hover:text-foreground hover:translate-x-0.5"
+                ? "bg-sidebar-accent text-sidebar-accent-foreground shadow-sm ring-1 ring-sidebar-ring/15"
+                : "text-sidebar-foreground/75 hover:bg-sidebar-accent/50 hover:text-sidebar-accent-foreground hover:translate-x-0.5"
             )}
           >
             <Icon className="size-5 shrink-0" aria-hidden="true" />
             {!collapsed && <span className="truncate">{item.title}</span>}
             {active && !collapsed && (
-              <span className="ml-auto h-5 w-1 rounded-full bg-primary" />
+              <span className="ml-auto h-5 w-1 rounded-full bg-sidebar-primary" />
             )}
           </Link>
         )
@@ -119,6 +119,18 @@ export function PortalShell({ children }: { children: React.ReactNode }) {
   const [collapsed, setCollapsed] = useState(false)
   const [mobileOpen, setMobileOpen] = useState(false)
   const pathname = usePathname()
+
+  useEffect(() => {
+    const savedTheme = localStorage.getItem("theme") || "light"
+    const root = document.documentElement
+    if (savedTheme === "dark") {
+      root.classList.add("dark")
+      root.classList.remove("light")
+    } else {
+      root.classList.add("light")
+      root.classList.remove("dark")
+    }
+  }, [])
 
   return (
     <div
@@ -146,13 +158,13 @@ export function PortalShell({ children }: { children: React.ReactNode }) {
           <NavLinks collapsed={collapsed} />
         </div>
 
-        <div className="border-t border-border p-3">
+        <div className="border-t border-sidebar-border p-3">
           <Button
             variant="ghost"
             size="sm"
             onClick={() => setCollapsed((value) => !value)}
             className={cn(
-              "w-full text-muted-foreground",
+              "w-full text-sidebar-foreground/80 hover:text-sidebar-foreground hover:bg-sidebar-accent",
               collapsed ? "justify-center px-0" : "justify-start"
             )}
             aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
@@ -203,7 +215,7 @@ export function PortalShell({ children }: { children: React.ReactNode }) {
           </Sheet>
 
           <div className="flex min-w-0 items-center gap-2.5">
-            <div className="animate-logo-breathe flex size-9 shrink-0 items-center justify-center rounded-md border border-primary/15 bg-card shadow-sm lg:hidden">
+            <div className="animate-logo-breathe flex size-9 shrink-0 items-center justify-center rounded-md border border-primary/15 bg-card shadow-sm">
               <Image
                 src="/NTPC-Preview.png"
                 alt="NTPC"
@@ -233,12 +245,6 @@ export function PortalShell({ children }: { children: React.ReactNode }) {
               />
               <TooltipContent side="bottom">Help &amp; Support</TooltipContent>
             </Tooltip>
-            <div
-              className="flex size-9 items-center justify-center rounded-full bg-secondary text-sm font-semibold text-secondary-foreground"
-              aria-hidden="true"
-            >
-              RK
-            </div>
           </div>
         </header>
 

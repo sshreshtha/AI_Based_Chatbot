@@ -1,9 +1,9 @@
 "use client"
 
 import { useState } from "react"
+import Image from "next/image"
 import { motion } from "motion/react"
 import {
-  Bot,
   User,
   Copy,
   Check,
@@ -54,28 +54,23 @@ function ConfidenceMeter({ score }: { score: number }) {
   )
 }
 
-function QuestionBubble({ question }: { question: string }) {
-  return (
-    <div className="flex items-start justify-end gap-3">
-      <div className="max-w-[85%] rounded-lg rounded-tr-sm bg-primary px-4 py-3 text-sm leading-relaxed text-primary-foreground">
-        {question}
-      </div>
-      <div className="flex size-8 shrink-0 items-center justify-center rounded-full bg-secondary text-secondary-foreground">
-        <User className="size-4" aria-hidden="true" />
-      </div>
-    </div>
-  )
-}
+
 
 export function TypingIndicator() {
   return (
-    <Card className="ntpc-card border-border bg-card/92">
-      <CardContent className="p-5">
-        <div className="flex items-start gap-3">
-          <div className="animate-logo-breathe flex size-8 shrink-0 items-center justify-center rounded-full bg-primary text-primary-foreground">
-            <Bot className="size-4" aria-hidden="true" />
-          </div>
-          <div className="flex flex-col gap-3 pt-1">
+    <div className="flex items-start justify-start gap-3 w-full">
+      <div className="animate-logo-breathe flex size-8 shrink-0 items-center justify-center rounded-full bg-card border border-primary/15 overflow-hidden shadow-sm">
+        <Image
+          src="/NTPC-Preview.png"
+          alt="NTPC"
+          width={20}
+          height={20}
+          className="h-5 w-auto object-contain"
+        />
+      </div>
+      <Card className="ntpc-card border-border bg-card/92 max-w-[85%] flex-1 rounded-2xl rounded-tl-none shadow-sm">
+        <CardContent className="p-5">
+          <div className="flex flex-col gap-3">
             <div className="flex items-center gap-1.5" aria-label="Assistant is typing">
               {[0, 1, 2].map((i) => (
                 <motion.span
@@ -96,9 +91,9 @@ export function TypingIndicator() {
               <Skeleton className="h-3 w-[180px] max-w-full" />
             </div>
           </div>
-        </div>
-      </CardContent>
-    </Card>
+        </CardContent>
+      </Card>
+    </div>
   )
 }
 
@@ -255,16 +250,11 @@ function AnswerCard({
   }
 
   return (
-    <Card className="ntpc-card border-border bg-card/92">
+    <Card className="ntpc-card border-border bg-card/92 rounded-2xl rounded-tl-none shadow-sm">
       <CardContent className="flex flex-col gap-4 p-5">
-        <div className="flex items-start gap-3">
-          <div className="animate-logo-breathe flex size-8 shrink-0 items-center justify-center rounded-full bg-primary text-primary-foreground">
-            <Bot className="size-4" aria-hidden="true" />
-          </div>
-          <p className="pt-1 text-sm leading-relaxed text-foreground">
-            {result.answer}
-          </p>
-        </div>
+        <p className="text-sm leading-relaxed text-foreground">
+          {result.answer}
+        </p>
 
         <ConfidenceMeter score={result.confidence} />
 
@@ -355,7 +345,7 @@ function TicketCard({
   }
 
   return (
-    <Card className="border-amber-300 bg-amber-50">
+    <Card className="border-amber-300 bg-amber-50 rounded-2xl rounded-tl-none shadow-sm">
       <CardContent className="flex flex-col gap-4 p-5">
         <div className="flex items-start gap-3">
           <div className="flex size-8 shrink-0 items-center justify-center rounded-full bg-amber-100 text-amber-700">
@@ -441,14 +431,37 @@ export function AiResponse({ result, sessionId }: { result: AnswerResult; sessio
       initial={{ opacity: 0, y: 12 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.3, ease: "easeOut" }}
-      className="flex flex-col gap-4"
+      className="flex flex-col gap-6"
     >
-      <QuestionBubble question={result.question} />
-      {result.kind === "answer" ? (
-        <AnswerCard result={result} sessionId={sessionId} />
-      ) : (
-        <TicketCard result={result} sessionId={sessionId} />
-      )}
+      {/* Question bubble on the right */}
+      <div className="flex items-start justify-end gap-3 w-full">
+        <div className="max-w-[85%] rounded-2xl rounded-tr-none bg-primary px-4 py-3 text-sm leading-relaxed text-primary-foreground shadow-sm animate-soft-rise">
+          {result.question}
+        </div>
+        <div className="flex size-8 shrink-0 items-center justify-center rounded-full bg-secondary text-secondary-foreground shadow-sm border border-border">
+          <User className="size-4" aria-hidden="true" />
+        </div>
+      </div>
+
+      {/* Answer on the left */}
+      <div className="flex items-start justify-start gap-3 w-full">
+        <div className="animate-logo-breathe flex size-8 shrink-0 items-center justify-center rounded-full bg-card border border-primary/15 overflow-hidden shadow-sm">
+          <Image
+            src="/NTPC-Preview.png"
+            alt="NTPC"
+            width={20}
+            height={20}
+            className="h-5 w-auto object-contain"
+          />
+        </div>
+        <div className="flex-1 max-w-[85%] animate-soft-rise">
+          {result.kind === "answer" ? (
+            <AnswerCard result={result} sessionId={sessionId} />
+          ) : (
+            <TicketCard result={result} sessionId={sessionId} />
+          )}
+        </div>
+      </div>
     </motion.div>
   )
 }
