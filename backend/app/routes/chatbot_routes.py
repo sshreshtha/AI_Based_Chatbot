@@ -1,4 +1,3 @@
-from fastapi import Depends
 from app.auth.jwt_handler import get_current_admin
 import logging
 from time import perf_counter

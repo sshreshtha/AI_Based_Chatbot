@@ -1,19 +1,39 @@
 # Environment variables
 .env
 .env*.local
+*.local
 
 # Python
 venv/
 __pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
 
-# Node / Next.js
-node_modules
+# Node / Next.js / Vite
+node_modules/
 .next/
-dist
-build
+dist/
+dist-ssr/
+build/
+.output/
+.vinxi/
+.tanstack/**
+.nitro/
+
+# Logs
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
 
 # OS files
 .DS_Store
+Thumbs.db
 
 # v0 / tooling files
 __v0_runtime_loader.js
@@ -24,3 +44,20 @@ __v0_jsx-dev-runtime.ts
 
 # Deployment
 .vercel/
+
+# Wrangler / Cloudflare
+.wrangler/
+.dev.vars
+
+# Editor directories
+.vscode/*
+!.vscode/extensions.json
+.idea/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
+# Lock files (keep package-lock.json and bun.lock)
+pnpm-lock.yaml
