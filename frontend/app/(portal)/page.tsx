@@ -69,7 +69,8 @@ export default function DashboardPage() {
                     alt="NTPC"
                     width={32}
                     height={32}
-                    className="h-7 w-auto object-contain"
+                    className="h-7 object-contain"
+                    style={{ width: "auto" }}
                     priority
                   />
                 </div>
@@ -124,7 +125,8 @@ export default function DashboardPage() {
                   alt="NTPC"
                   width={14}
                   height={14}
-                  className="size-3.5 object-contain"
+                  className="object-contain"
+                  style={{ width: "14px", height: "14px" }}
                 />
                 NTPC onboarding assistant
               </Badge>
@@ -241,7 +243,8 @@ export default function DashboardPage() {
                     alt="NTPC"
                     width={20}
                     height={20}
-                    className="h-5 w-auto object-contain"
+                    className="h-5 object-contain"
+                    style={{ width: "auto" }}
                   />
                 </div>
                 <div className="flex-1 max-w-[85%]">

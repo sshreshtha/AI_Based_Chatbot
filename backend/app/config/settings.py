@@ -231,15 +231,24 @@ class Settings(BaseSettings):
     @field_validator("cors_origins", mode="before")
     @classmethod
     def normalize_cors_origins(cls, value):
+        import json
+
         if value is None:
             return value
 
+        if isinstance(value, list):
+            return value
+
         if isinstance(value, str):
-            return [
-                item.strip()
-                for item in value.split(",")
-                if item.strip()
-            ]
+            stripped = value.strip()
+            # Try JSON array first (e.g. ["http://localhost:3000",...])
+            if stripped.startswith("["):
+                try:
+                    return json.loads(stripped)
+                except json.JSONDecodeError:
+                    pass
+            # Fall back to comma-separated plain strings
+            return [item.strip() for item in stripped.split(",") if item.strip()]
 
         return value
 

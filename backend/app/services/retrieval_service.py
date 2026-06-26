@@ -15,6 +15,10 @@ from app.services.nlp_service import NLPPreprocessingService, PreprocessedQuery
 
 logger = logging.getLogger(__name__)
 
+HIGH_VECTOR_FLOOR = 0.78
+MIN_SEMANTIC_KEYWORD_SCORE = 0.20
+MIN_SINGLE_CONCEPT_KEYWORD_SCORE = 0.55
+
 INTENT_TOKENS = frozenset(
     {"how", "what", "when", "where", "why", "much", "many", "does", "do", "is", "are", "the"}
 )
@@ -105,9 +109,9 @@ class RetrievalService:
         )
 
     def _embedding_text(self, processed: PreprocessedQuery) -> str:
-        if processed.aliases:
-            alias_text = " ".join(processed.aliases.values())
-            return f"{processed.normalized} {alias_text}".strip()
+        expanded = processed.expanded_query.strip()
+        if expanded and expanded != processed.normalized:
+            return f"{processed.normalized} {expanded}".strip()
         return processed.normalized
 
     def _vector_search(self, collection_name: str, embedding: List[float], limit: int) -> List[tuple[str, dict]]:
@@ -147,7 +151,8 @@ class RetrievalService:
         limit = max(3, self.settings.top_k)
 
         for token in concepts[:6]:
-            pattern = {"$regex": rf"\b{re.escape(token)}\b", "$options": "i"}
+            variants = "|".join(re.escape(variant) for variant in self._token_variants(token))
+            pattern = {"$regex": rf"\b(?:{variants})\b", "$options": "i"}
             for collection_name in ("knowledge_chunks", "admin_resolutions"):
                 if collection_name == "admin_resolutions":
                     query = {"$or": [{"text": pattern}, {"answer": pattern}, {"question": pattern}]}
@@ -200,9 +205,8 @@ class RetrievalService:
         substantive_tokens = self._concept_tokens(processed)
         if substantive_tokens and substantive_overlap >= 1.0:
             final_score = min(1.0, final_score + 0.12)
-        source_doc = str(item.get("source_document") or "").lower()
-        if "service rules" in processed.normalized and "service_rules" in source_doc.replace(" ", "_"):
-            final_score = min(1.0, final_score + 0.15)
+        if not self._source_matches_concepts(source.preview.lower(), processed, substantive_tokens):
+            final_score = min(final_score, vector_score * self.settings.hybrid_vector_weight)
         return _ScoredCandidate(
             source=source,
             vector_score=vector_score,
@@ -219,7 +223,7 @@ class RetrievalService:
         token_matches = sum(1 for token in tokens if self._token_in_text(token, text))
         token_overlap = token_matches / len(tokens) if tokens else 0.0
 
-        phrase_matches = sum(1 for phrase in processed.phrases if phrase in text)
+        phrase_matches = sum(1 for phrase in processed.phrases if self._phrase_in_text(phrase, text))
         phrase_overlap = phrase_matches / len(processed.phrases) if processed.phrases else 0.0
 
         substantive_tokens = [token for token in tokens if token not in INTENT_TOKENS] or tokens
@@ -241,7 +245,33 @@ class RetrievalService:
         return keyword_score, substantive_overlap
 
     def _token_in_text(self, token: str, text: str) -> bool:
-        return bool(re.search(rf"\b{re.escape(token)}\b", text))
+        return any(re.search(rf"\b{re.escape(variant)}\b", text) for variant in self._token_variants(token))
+
+    def _phrase_in_text(self, phrase: str, text: str) -> bool:
+        phrase_tokens = re.findall(r"[a-z0-9]+", phrase.lower())
+        if not phrase_tokens:
+            return False
+        pattern = r"\b" + r"\s+".join(
+            f"(?:{'|'.join(re.escape(variant) for variant in self._token_variants(token))})"
+            for token in phrase_tokens
+        ) + r"\b"
+        return bool(re.search(pattern, text))
+
+    def _token_variants(self, token: str) -> List[str]:
+        variants = [token]
+        if len(token) > 3:
+            if token.endswith("y"):
+                variants.append(f"{token[:-1]}ies")
+            elif token.endswith("s"):
+                variants.append(token[:-1])
+            else:
+                variants.append(f"{token}s")
+        if len(token) > 4 and token.endswith("e"):
+            variants.append(f"{token[:-1]}ing")
+        if len(token) > 4 and token.endswith("ing"):
+            stem = token[:-3]
+            variants.extend([stem, f"{stem}e"])
+        return list(dict.fromkeys(variant for variant in variants if len(variant) > 1))
 
     def _concept_tokens(self, processed: PreprocessedQuery) -> List[str]:
         tokens = list(dict.fromkeys([*processed.search_tokens, *processed.tokens]))
@@ -265,10 +295,18 @@ class RetrievalService:
             top_combined = best.score
             context_keyword_score = max(source.keyword_score or 0.0 for source in answerable_sources)
         answerable = bool(answerable_sources)
+        semantic_context = (
+            answerable
+            and top_vector >= HIGH_VECTOR_FLOOR
+            and context_keyword_score >= MIN_SEMANTIC_KEYWORD_SCORE
+        )
         weak_retrieval = (
             (not answerable)
             or top_combined < self.settings.weak_retrieval_threshold
-            or context_keyword_score < self.settings.min_answerability_keyword_score
+            or (
+                context_keyword_score < self.settings.min_answerability_keyword_score
+                and not semantic_context
+            )
         )
         return RetrievalQuality(
             vector_score=top_vector,
@@ -296,10 +334,16 @@ class RetrievalService:
         matched: List[SourceDocument] = []
         for source in sources:
             keyword_score = source.keyword_score or 0.0
-            if keyword_score < self.settings.min_answerability_keyword_score:
+            semantic_match = (
+                (source.vector_score or 0.0) >= HIGH_VECTOR_FLOOR
+                and keyword_score >= MIN_SEMANTIC_KEYWORD_SCORE
+            )
+            if keyword_score < self.settings.min_answerability_keyword_score and not semantic_match:
                 continue
             text = source.preview.lower()
             if not self._source_matches_concepts(text, processed, strong_concepts or concept_tokens):
+                continue
+            if len(strong_concepts) <= 1 and keyword_score < MIN_SINGLE_CONCEPT_KEYWORD_SCORE and not semantic_match:
                 continue
             if source.collection == "admin_resolutions":
                 kb_best = max(
@@ -309,9 +353,6 @@ class RetrievalService:
                 if keyword_score < max(0.55, kb_best):
                     continue
             matched.append(source)
-        if "service rules" in processed.normalized:
-            preferred = [source for source in matched if source.topic and "service rules" in source.topic.lower()]
-            return preferred or []
         return matched
 
     def _source_matches_concepts(
@@ -320,7 +361,7 @@ class RetrievalService:
         processed: PreprocessedQuery,
         concepts: List[str],
     ) -> bool:
-        if any(phrase in text for phrase in processed.phrases):
+        if any(self._phrase_in_text(phrase, text) for phrase in processed.phrases):
             return True
         strong = [token for token in concepts if token not in GENERIC_CONCEPT_TOKENS]
         if len(strong) >= 2:

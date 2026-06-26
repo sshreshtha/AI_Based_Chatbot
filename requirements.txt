@@ -10,3 +10,5 @@ rapidfuzz
 google-genai
 PyMuPDF
 python-multipart
+python-jose
+passlib

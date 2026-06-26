@@ -1,5 +1,6 @@
 import re
 import string
+import unicodedata
 from dataclasses import dataclass
 from typing import Dict, Iterable, List, Set
 
@@ -54,9 +55,12 @@ class NLPPreprocessingService:
         )
 
     def normalize(self, query: str) -> str:
-        query = query.lower().strip()
-        query = query.translate(str.maketrans({char: " " for char in string.punctuation}))
-        return re.sub(r"\s+", " ", query)
+        query = unicodedata.normalize("NFKC", query).lower().strip()
+        query = re.sub(r"(?<=\d),(?=\d)", "", query)
+        punctuation_map = {char: " " for char in string.punctuation}
+        punctuation_map["%"] = " percent "
+        query = query.translate(str.maketrans(punctuation_map))
+        return re.sub(r"\s+", " ", query).strip()
 
     def tokenize(self, text: str) -> List[str]:
         return re.findall(r"[a-z0-9]+", text)
@@ -67,11 +71,12 @@ class NLPPreprocessingService:
     def lemmatize(self, token: str) -> str:
         if len(token) > 4 and token.endswith("ies"):
             return f"{token[:-3]}y"
-        if len(token) > 4 and token.endswith("ing"):
-            return token[:-3]
+        if len(token) > 5 and token.endswith("ing"):
+            stem = token[:-3]
+            return stem[:-1] if len(stem) > 3 and stem[-1] == stem[-2] else token
         if len(token) > 3 and token.endswith("ed"):
             return token[:-2]
-        if len(token) > 3 and token.endswith("s"):
+        if len(token) > 4 and token.endswith("s") and not token.endswith("ss"):
             return token[:-1]
         return token
 
@@ -104,9 +109,10 @@ class NLPPreprocessingService:
         matched: Dict[str, str] = {}
         expanded_terms = list(tokens)
         for alias, topic in alias_map.items():
-            if alias in query_text:
+            alias_tokens = self.tokenize(alias)
+            if alias_tokens and re.search(rf"\b{re.escape(' '.join(alias_tokens))}\b", query_text):
                 matched[alias] = topic
-                expanded_terms.append(topic)
+                expanded_terms.extend(self.tokenize(topic))
         return " ".join(dict.fromkeys(expanded_terms)), matched
 
     def extract_phrases(self, normalized: str) -> List[str]:

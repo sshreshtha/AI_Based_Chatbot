@@ -72,28 +72,21 @@ def get_services(settings: Settings = Depends(get_settings)) -> dict:
 def query_chatbot(payload: ChatQueryRequest, services: Annotated[dict, Depends(get_services)]) -> ChatQueryResponse:
     try:
         result = services["retrieval"].retrieve(payload.query)
-        # Evaluate confidence of retrieved results using settings (high >= 0.90, medium >= 0.75)
+
+        # Evaluate confidence of retrieved results using settings (high >= 0.90, medium >= 0.75).
         # If confidence is low (< 0.75), ticket_required is True.
         confidence = services["confidence"].evaluate(result.quality)
         ticket_suggested = confidence.ticket_required
-        
-        # Bypass cache lookup and Gemini answer generation if confidence is too low.
-        # This prevents AI hallucinations and is safer for demo/hackathon presentations.
-        cached_answer = None if ticket_suggested else services["cache"].get_cached_answer(result.mapped_topic)
-        cached = cached_answer is not None
-        weak_retrieval_message = (
-            "The knowledge base does not contain sufficient information to answer this question. "
-            "Would you like to raise a support ticket for admin review?"
-        )
-        answer = (
-            weak_retrieval_message
-            if ticket_suggested
-            else cached_answer or services["gemini"].generate_answer(payload.query, result.context)
-        )
 
+        # When retrieval is too weak, skip both cache and Gemini; the mapped
+        # topic is unreliable and could produce a wrong cached answer.
         if ticket_suggested:
+            weak_retrieval_message = (
+                "The knowledge base does not contain sufficient information to answer this question. "
+                "Would you like to raise a support ticket for admin review?"
+            )
             return ChatQueryResponse(
-                answer=answer,
+                answer=weak_retrieval_message,
                 mapped_topic=result.mapped_topic,
                 confidence=confidence,
                 ticket_required=True,
@@ -104,8 +97,36 @@ def query_chatbot(payload: ChatQueryRequest, services: Annotated[dict, Depends(g
                 session_id=payload.session_id,
             )
 
-        if not cached:
-            services["cache"].store_answer(result.mapped_topic, payload.query, answer)
+        # --- Cache lookup with strict similarity gating ---
+        # Build the embedding for the incoming query once (reuse the one from
+        # retrieval by re-embedding the same embed_text produced in retrieve()).
+        # We use the same embedding service so vectors are comparable.
+        query_embedding: list = services["retrieval"].embedding_service.embed_query(
+            services["retrieval"]._embedding_text(result.processed)
+        )
+
+        cached_answer = services["cache"].get_cached_answer(
+            topic=result.mapped_topic,
+            query=payload.query,
+            query_embedding=query_embedding,
+            similarity_floor=services["settings"].cache_similarity_floor,
+        )
+        cached = cached_answer is not None
+
+        if cached:
+            answer = cached_answer
+        else:
+            # Full RAG path: generate answer from validated context only.
+            answer = services["gemini"].generate_answer(payload.query, result.context)
+            # Store the answer with its embedding and retrieval score so future
+            # cache lookups can properly gate on query similarity.
+            services["cache"].store_answer(
+                topic=result.mapped_topic,
+                query=payload.query,
+                answer=answer,
+                query_embedding=query_embedding,
+                retrieval_score=result.quality.combined_confidence,
+            )
 
         services["analytics"].record(
             payload.query,
