@@ -1,6 +1,6 @@
 # NTPC AI Chatbot
 
-An AI-powered knowledge assistant for NTPC employees and trainees. Answers questions about HR policies, safety procedures, joining formalities, and plant operations using a Retrieval-Augmented Generation (RAG) pipeline backed by MongoDB Atlas Vector Search and Google Gemini.
+An AI-powered knowledge assistant for NTPC employees and trainees. Answers questions about HR policies, safety procedures, joining formalities, and plant operations using a Retrieval-Augmented Generation (RAG) pipeline backed by MongoDB and Google Gemini.
 
 ---
 
@@ -15,12 +15,12 @@ data/knowledge/         Bundled PDF knowledge base (auto-ingested on startup)
 
 ### How it works
 
-1. **Ingestion** — PDFs in `data/knowledge/` are extracted, chunked, and embedded using `sentence-transformers/all-MiniLM-L6-v2`, then stored in MongoDB Atlas with vector search indexes.
-2. **Retrieval** — Incoming queries are NLP-preprocessed, embedded, and retrieved via hybrid vector + keyword search across `knowledge_chunks` and `admin_resolutions`.
-3. **Generation** — Retrieved context is passed to Google Gemini, which generates a grounded answer (no hallucination outside context).
-4. **Confidence** — A confidence score gates whether an answer is returned or a support ticket is suggested.
-5. **Caching** — High-confidence answers are cached by topic + embedding similarity, with strict token-overlap gating to prevent wrong cache hits.
-6. **Ticket escalation** — Low-confidence queries generate support tickets. Admins resolve tickets via the admin portal; resolutions are stored back as `admin_resolutions` for future retrieval.
+1. **Ingestion** - PDFs in `data/knowledge/` are extracted, chunked, and embedded using `sentence-transformers/all-MiniLM-L6-v2`, then stored in MongoDB.
+2. **Retrieval** - Incoming queries are NLP-preprocessed, embedded, and retrieved via hybrid vector + keyword search across `knowledge_chunks` and `admin_resolutions`.
+3. **Generation** - Retrieved context is passed to Google Gemini, which generates a grounded answer with no hallucination outside context.
+4. **Confidence** - A confidence score gates whether an answer is returned or a support ticket is suggested.
+5. **Caching** - High-confidence answers are cached by topic + embedding similarity, with strict token-overlap gating to prevent wrong cache hits.
+6. **Ticket escalation** - Low-confidence queries generate support tickets. Admins resolve tickets via the admin portal; resolutions are stored back as `admin_resolutions` for future retrieval.
 
 ---
 
@@ -28,7 +28,7 @@ data/knowledge/         Bundled PDF knowledge base (auto-ingested on startup)
 
 - Python 3.11+
 - Node.js 20+ and npm
-- MongoDB Atlas cluster with Vector Search enabled
+- MongoDB database
 - Google Gemini API key
 
 ---
@@ -41,14 +41,14 @@ Copy `.env` to the project root and fill in your values:
 
 ```env
 # MongoDB
-MONGO_URI=mongodb+srv://<user>:<password>@<cluster>.mongodb.net/
+MONGO_URI=mongodb://localhost:27017
 MONGO_DB=ntpc_ai_chatbot
 
 # Gemini
 GEMINI_API_KEY=your_gemini_api_key
 GEMINI_MODEL=gemini-2.5-flash
 
-# SMTP (optional — for ticket resolution emails)
+# SMTP (optional - for ticket resolution emails)
 SMTP_HOST=
 SMTP_PORT=587
 SMTP_USERNAME=
@@ -59,7 +59,7 @@ SMTP_FROM_EMAIL=
 JWT_SECRET_KEY=change_me_in_production
 ```
 
-### 2. MongoDB setup (first-time only)
+### 2. Python dependencies
 
 ```bash
 # Activate virtual environment
@@ -68,13 +68,6 @@ venv\Scripts\activate          # Windows
 # source venv/bin/activate     # macOS/Linux
 
 pip install -r requirements.txt
-
-# Create collections and standard indexes
-python setup_db.py
-python create_indexes.py
-
-# Create Atlas Vector Search indexes (run once per cluster)
-python create_vector_indexes.py
 ```
 
 ### 3. Backend
@@ -92,7 +85,7 @@ API docs available at `http://localhost:8000/docs`
 cd frontend
 npm install
 npm run dev
-# → http://localhost:3000
+# -> http://localhost:3000
 ```
 
 ### 5. Admin portal
@@ -101,7 +94,7 @@ npm run dev
 cd frontend_admin-portal
 npm install
 npm run dev
-# → http://localhost:8080
+# -> http://localhost:8080
 ```
 
 Default admin credentials (set via `.env`):
@@ -110,7 +103,7 @@ Default admin credentials (set via `.env`):
 
 ---
 
-## API reference
+## API Reference
 
 All endpoints are prefixed with `/api/chat`.
 
@@ -129,13 +122,13 @@ All endpoints are prefixed with `/api/chat`.
 
 ---
 
-## Knowledge base
+## Knowledge Base
 
 Place additional PDF documents in `data/knowledge/`. They are automatically ingested on backend startup if not already indexed. You can also upload PDFs directly from the admin portal.
 
 ---
 
-## Project structure
+## Project Structure
 
 ```
 backend/
@@ -154,7 +147,7 @@ backend/
       gemini_service.py         Grounded answer generation
       cache_service.py          Embedding-gated response cache
       confidence_service.py     Retrieval confidence classification
-      knowledge_ingestion_service.py  PDF → chunks → MongoDB
+      knowledge_ingestion_service.py  PDF -> chunks -> MongoDB
       local_ingestion_service.py      Auto-ingest bundled PDFs on startup
       pdf_extraction_service.py       PyMuPDF text extraction + cleaning
       admin_resolution_service.py     Store resolved tickets for retrieval
